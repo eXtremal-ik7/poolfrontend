@@ -1,0 +1,71 @@
+poolfrontend {
+  isMaster = "true";
+  dbPath = "/home/user/pooldb";
+  httpPort = "18880";
+  
+  coins = [
+    "BTC",
+    "XPM"
+  ];
+  
+  listeners = [
+    "BTC.stratum",
+    "XPM.zmq"
+  ];
+}
+
+coins {
+  BTC {
+    nodes = ["http://user@password:localhost:9332"];
+    algorithm = "sha256";
+    poolFeeAddrs = [];
+    poolFees = [];
+    requiredConfirmations = "10";
+    defaultMinimalPayout = "0.001";
+    minimalPayout = "0.001";
+    keepRoundTime = "3";
+    keepStatsTime = "2";
+    confirmationsCheckInterval = "7";
+    payoutInterval = "10";
+    balanceCheckInterval = "3";
+    statisticCheckInterval = "1";
+    checkAddress = "true";
+    shareTarget = "2048";
+    stratumWorkLifeTime = "9";
+  }
+  
+  XPM {
+    nodes = ["http://user@password:9912"];
+    algorithm = "primecoin";
+    poolFeeAddrs = [];
+    poolFees = [];
+    requiredConfirmations = "10";
+    defaultMinimalPayout = "4";
+    minimalPayout = "0.01";
+    keepRoundTime = "3";
+    keepStatsTime = "2";
+    confirmationsCheckInterval = "7";
+    payoutInterval = "10";
+    balanceCheckInterval = "3";
+    statisticCheckInterval = "1";
+    checkAddress = "true";
+    shareTarget = "7";
+  }
+}
+
+listeners {
+    BTC.stratum {
+      coin = "BTC";
+      type = "stratum";
+      host = "127.0.0.1";
+      port = "3456";
+    }
+    
+    XPM.zmq {
+      coin = "XPM";
+      type = "zmq";
+      host = "127.0.0.1";
+      listenPort = "6666";
+      workPort = "60000";
+    }    
+}

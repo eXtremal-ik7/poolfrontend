@@ -45,18 +45,21 @@ else(MSVC)
 endif(MSVC)
 
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectPoolcore.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/ProjectConfig4cpp.cmake)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 endif()
 
-message(${poolcore_SOURCE_DIR})
+message(${poolcore_BINARY_DIR})
 
 include_directories(
   ${CMAKE_SOURCE_DIR}/include
   ${poolcore_SOURCE_DIR}/src/include
+  ${poolcore_BINARY_DIR}
   ${libp2p_SOURCE_DIR}/include
   ${libp2p_BINARY_DIR}/include
+  ${CONFIG4CPP_INCLUDE_DIR}
 )
 
 add_executable(poolfrontend 
@@ -68,7 +71,13 @@ target_link_libraries(poolfrontend
   loguru
   asyncio-0.5
   asyncioextras-0.5
+  p2p
   p2putils
+  ${CONFIG4CPP_LIBRARY}
+)
+
+add_dependencies(poolfrontend
+  config4cpp
 )
 
 # OS-specific configuration
@@ -76,4 +85,13 @@ if (WIN32)
   target_link_libraries(poolfrontend ws2_32 mswsock)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(poolfrontend dl)
+endif()
+
+# Compiler-specific configuration
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_link_libraries(poolfrontend
+    atomic
+    pthread
+    stdc++fs
+  )
 endif()

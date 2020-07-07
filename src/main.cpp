@@ -1,3 +1,4 @@
+#include "http.h"
 #include "poolcore/backend.h"
 
 #include "config4cpp/Configuration.h"
@@ -13,17 +14,33 @@
 
 #include <thread>
 
+static std::atomic<unsigned> threadCounter = 0;
+static __tls unsigned threadId;
+
 static int interrupted = 0;
 static void sigIntHandler(int) { interrupted = 1; }
 
-struct PoolConfig {
+struct PoolContext {
   bool IsMaster;
   std::filesystem::path DatabasePath;
   uint16_t HttpPort;
 
+  std::unique_ptr<PoolHttpServer> HttpServer;
   std::unique_ptr<UserManager> UserMgr;
   std::vector<PoolBackend> Backends;
+  std::unordered_map<std::string, size_t> CoinIdxMap;
 };
+
+void InitializeWorkerThread()
+{
+  threadId = threadCounter.fetch_add(1);
+}
+
+unsigned GetWorkerThreadId()
+{
+  return threadId;
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -50,23 +67,27 @@ int main(int argc, char *argv[])
 
   PoolBackendConfig backendConfig;
   config4cpp::Configuration *cfg = config4cpp::Configuration::create();
-  PoolConfig poolConfig;
+  PoolContext poolContext;
+  unsigned workerThreadsNum = 0;
 
   try {
     cfg->parse(argv[1]);
     const char *frontendSection = "poolfrontend";
 
-    poolConfig.IsMaster = cfg->lookupBoolean(frontendSection, "isMaster", true);
-    poolConfig.DatabasePath = cfg->lookupString(frontendSection, "dbPath");
-    poolConfig.HttpPort = cfg->lookupInt(frontendSection, "httpPort");
+    poolContext.IsMaster = cfg->lookupBoolean(frontendSection, "isMaster", true);
+    poolContext.DatabasePath = cfg->lookupString(frontendSection, "dbPath");
+    poolContext.HttpPort = cfg->lookupInt(frontendSection, "httpPort");
+    workerThreadsNum = cfg->lookupInt(frontendSection, "workerThreadsNum", 0);
 
     // Initialize user manager
-    poolConfig.UserMgr.reset(new UserManager(poolConfig.DatabasePath));
+    poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
 
     // Initialize all backends
     config4cpp::StringVector coinsList;
     cfg->lookupList(frontendSection, "coins", coinsList);
     for (int i = 0, ie = coinsList.length(); i != ie; ++i) {
+      poolContext.CoinIdxMap[coinsList[i]] = i;
+
       std::string scopeName = std::string("coins.") + coinsList[i];
       const char *scope = scopeName.c_str();
 
@@ -74,8 +95,8 @@ int main(int argc, char *argv[])
       backendConfig.CoinName = coinsList[i];
 
       // Inherited pool config parameters
-      backendConfig.isMaster = poolConfig.IsMaster;
-      backendConfig.dbPath = poolConfig.DatabasePath;
+      backendConfig.isMaster = poolContext.IsMaster;
+      backendConfig.dbPath = poolContext.DatabasePath;
 
       // Backend parameters
       backendConfig.RequiredConfirmations = cfg->lookupInt(scope, "requiredConfirmations", 10);
@@ -92,7 +113,7 @@ int main(int argc, char *argv[])
       backendConfig.poolTAddr = cfg->lookupString(scope, "pool_taddr", "");
 
       // Initialize backend
-      poolConfig.Backends.emplace_back(std::move(backendConfig), *poolConfig.UserMgr);
+      poolContext.Backends.emplace_back(std::move(backendConfig), *poolContext.UserMgr);
     }
 
   } catch(const config4cpp::ConfigurationException& ex){
@@ -104,18 +125,35 @@ int main(int argc, char *argv[])
   asyncBase *base = createAsyncBase(amOSDefault);
     
   // Start backends for all coins
-  for (auto &backend: poolConfig.Backends) {
+  for (auto &backend: poolContext.Backends) {
     backend.start();
+  }
+
+  poolContext.HttpServer.reset(new PoolHttpServer(base, poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.CoinIdxMap));
+  poolContext.HttpServer->start();
+
+  if (workerThreadsNum == 0)
+    workerThreadsNum = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() : 2;
+
+  std::unique_ptr<std::thread[]> workerThreads(new std::thread[workerThreadsNum]);
+  for (unsigned i = 0; i < workerThreadsNum; i++) {
+    workerThreads[i] = std::thread([](asyncBase *base, unsigned) {
+      char threadName[16];
+      InitializeWorkerThread();
+      snprintf(threadName, sizeof(threadName), "worker%u", GetWorkerThreadId());
+      loguru::set_thread_name(threadName);
+      asyncLoop(base);
+    }, base, i);
   }
 
   // Handle CTRL+C (SIGINT)
   signal(SIGINT, sigIntHandler);
   signal(SIGTERM, sigIntHandler);
-  std::thread sigIntThread([&base, &poolConfig]() {
+  std::thread sigIntThread([&base, &poolContext]() {
     while (!interrupted)
       std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG_F(INFO, "Interrupted by user");
-    for (auto &backend: poolConfig.Backends) {
+    for (auto &backend: poolContext.Backends) {
       backend.stop();
     }
     postQuitOperation(base);
@@ -123,7 +161,9 @@ int main(int argc, char *argv[])
 
   sigIntThread.detach();
 
-  asyncLoop(base);
+  for (unsigned i = 0; i < workerThreadsNum; i++)
+    workerThreads[i].join();
+
   LOG_F(INFO, "poolfrondend stopped\n");
   return 0;
 }

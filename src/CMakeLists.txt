@@ -64,6 +64,7 @@ include_directories(
 
 add_executable(poolfrontend 
   main.cpp
+  http.cpp
 )
 
 target_link_libraries(poolfrontend

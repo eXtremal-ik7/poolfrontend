@@ -21,6 +21,7 @@ struct PoolConfig {
   std::filesystem::path DatabasePath;
   uint16_t HttpPort;
 
+  std::unique_ptr<UserManager> UserMgr;
   std::vector<PoolBackend> Backends;
 };
 
@@ -60,6 +61,7 @@ int main(int argc, char *argv[])
     poolConfig.HttpPort = cfg->lookupInt(frontendSection, "httpPort");
 
     // Initialize user manager
+    poolConfig.UserMgr.reset(new UserManager(poolConfig.DatabasePath));
 
     // Initialize all backends
     config4cpp::StringVector coinsList;
@@ -90,7 +92,7 @@ int main(int argc, char *argv[])
       backendConfig.poolTAddr = cfg->lookupString(scope, "pool_taddr", "");
 
       // Initialize backend
-      poolConfig.Backends.emplace_back(std::move(backendConfig));
+      poolConfig.Backends.emplace_back(std::move(backendConfig), *poolConfig.UserMgr);
     }
 
   } catch(const config4cpp::ConfigurationException& ex){

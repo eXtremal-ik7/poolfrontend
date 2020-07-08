@@ -41,7 +41,6 @@ unsigned GetWorkerThreadId()
   return threadId;
 }
 
-
 int main(int argc, char *argv[])
 {
   if (argc != 2) {
@@ -124,6 +123,9 @@ int main(int argc, char *argv[])
   initializeSocketSubsystem();
   asyncBase *base = createAsyncBase(amOSDefault);
     
+  // Start user manager
+  poolContext.UserMgr->start();
+
   // Start backends for all coins
   for (auto &backend: poolContext.Backends) {
     backend.start();
@@ -153,9 +155,9 @@ int main(int argc, char *argv[])
     while (!interrupted)
       std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG_F(INFO, "Interrupted by user");
-    for (auto &backend: poolContext.Backends) {
+    for (auto &backend: poolContext.Backends)
       backend.stop();
-    }
+    poolContext.UserMgr->stop();
     postQuitOperation(base);
   });
 

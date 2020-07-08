@@ -2,9 +2,25 @@
 #include "asyncio/coroutine.h"
 #include "asyncio/socket.h"
 #include "loguru.hpp"
+#include "rapidjson/document.h"
+
+static bool parseUserCredentials(const char *json, UserManager::Credentials &credentials);
 
 std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> PoolHttpConnection::FunctionNameMap_ = {
-  {"userCreate", {hmGet, fnUserCreate}}
+  // User manager functions
+  {"usercreate", {hmPost, fnUserCreate}},
+  {"userresendemail", {hmPost, fnUserResendEmail}},
+  {"userlogin", {hmPost, fnUserLogin}},
+  {"userlogout", {hmPost, fnUserLogout}},
+  {"userchangeemail", {hmPost, fnUserChangeEmail}},
+  {"userchangepassword", {hmPost, fnUserChangePassword}},
+  {"userrecoverypassword", {hmPost, fnUserRecoveryPassword}},
+  {"usergetcredentials", {hmGet, fnUserGetCredentials}},
+  {"usergetsettings", {hmGet, fnUserGetSettings}},
+  {"userupdatecredentials", {hmPost, fnUserUpdateCredentials}},
+  {"userupdatesettings", {hmPost, fnUserUpdateSettings}},
+  // Backend functions
+  {"backendmanualpayout", {hmPost, fnBackendManualPayout}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
@@ -22,7 +38,6 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
   if (component->type == httpRequestDtMethod) {
     Context.method = component->method;
     Context.function = fnUnknown;
-    Context.argumentsNum = 0;
     return 1;
   }
 
@@ -44,7 +59,31 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       reply404();
       return 0;
     }
+  } else if (component->type == httpRequestDtData) {
+    Context.Request.append(component->data.data, component->data.data + component->data.size);
+    return 1;
+  } else if (component->type == httpRequestDtDataLast) {
+    Context.Request.append(component->data.data, component->data.data + component->data.size);
+    switch (Context.function) {
+      case fnUserCreate : onUserCreate(); break;
+      case fnUserResendEmail: onUserResendEmail(); break;
+      case fnUserLogin: onUserLogin(); break;
+      case fnUserLogout: onUserLogout(); break;
+      case fnUserChangeEmail: onUserChangeEmail(); break;
+      case fnUserChangePassword: onUserChangePassword(); break;
+      case fnUserRecoveryPassword: onUserRecoveryPassword(); break;
+      case fnUserGetCredentials: onUserGetCredentials(); break;
+      case fnUserGetSettings: onUserGetSettings(); break;
+      case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
+      case fnUserUpdateSettings: onUserUpdateSettings(); break;
+      case fnBackendManualPayout: onBackendManualPayout(); break;
+      default:
+        reply404();
+        return 0;
+    }
   }
+
+  return 1;
 }
 
 void PoolHttpConnection::onWrite()
@@ -90,6 +129,12 @@ void PoolHttpConnection::onRead(AsyncOpStatus status, size_t size)
   }
 }
 
+void PoolHttpConnection::reply200(xmstream &stream)
+{
+  const char reply200[] = "HTTP/1.1 200 OK\r\nServer: bcnode\r\nTransfer-Encoding: chunked\r\n\r\n";
+  stream.write(reply200, sizeof(reply200)-1);
+}
+
 void PoolHttpConnection::reply404()
 {
   const char reply404[] = "HTTP/1.1 404 Not Found\r\nServer: bcnode\r\nTransfer-Encoding: chunked\r\n\r\n";
@@ -126,6 +171,145 @@ void PoolHttpConnection::close()
 {
   if (Deleted_++ == 0)
     deleteAioObject(Socket_);
+}
+
+void PoolHttpConnection::onUserCreate()
+{
+  UserManager::Credentials credentials;
+  if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
+    // TODO: use different error code
+    reply404();
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userCreate(std::move(credentials), [this](bool success, const std::string &error) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    if (success) {
+      stream.write("{\"error\": null}");
+    } else {
+      stream.write("{\"error\": \"");
+      stream.write(error.data(), error.size());
+      stream.write("\"}\n");
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
+void PoolHttpConnection::onUserResendEmail()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserLogin()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserLogout()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserChangeEmail()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserChangePassword()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserRecoveryPassword()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserGetCredentials()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserGetSettings()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserUpdateCredentials()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onUserUpdateSettings()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendManualPayout()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
 PoolHttpServer::PoolHttpServer(asyncBase *base,
@@ -177,4 +361,25 @@ void PoolHttpServer::acceptCb(AsyncOpStatus status, aioObject *object, HostAddre
   }
 
   aioAccept(object, 0, acceptCb, arg);
+}
+
+static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsString())
+      out = document[name].GetString();
+    else
+      *validAcc = false;
+  }
+}
+
+static bool parseUserCredentials(const char *json, UserManager::Credentials &credentials)
+{
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(json);
+  jsonParseString(document, "login", credentials.Login, &validAcc);
+  jsonParseString(document, "password", credentials.Password, &validAcc);
+  jsonParseString(document, "name", credentials.Name, &validAcc);
+  jsonParseString(document, "email", credentials.EMail, &validAcc);
+  return validAcc;
 }

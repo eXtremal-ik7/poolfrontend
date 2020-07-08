@@ -25,6 +25,9 @@ set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake
 )
 
+set(CMAKE_DEBUG_POSTFIX d)
+add_definitions(-DTBB_USE_EXCEPTIONS=0)
+
 if(MSVC)
   add_definitions(
     -D_CRT_SECURE_NO_DEPRECATE
@@ -46,12 +49,13 @@ endif(MSVC)
 
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectPoolcore.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectConfig4cpp.cmake)
+hunter_add_package(RapidJSON)
+
+find_package(RapidJSON CONFIG REQUIRED)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 endif()
-
-message(${poolcore_BINARY_DIR})
 
 include_directories(
   ${CMAKE_SOURCE_DIR}/include
@@ -75,6 +79,7 @@ target_link_libraries(poolfrontend
   p2p
   p2putils
   ${CONFIG4CPP_LIBRARY}
+  RapidJSON::rapidjson
 )
 
 add_dependencies(poolfrontend

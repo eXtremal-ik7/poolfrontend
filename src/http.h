@@ -9,6 +9,9 @@ class PoolHttpConnection {
 public:
   PoolHttpConnection(PoolHttpServer &server, HostAddress address, aioObject *socket) : Server_(server), Address_(address), Socket_(socket) {
     httpRequestParserInit(&ParserState);
+    objectSetDestructorCb(aioObjectHandle(Socket_), [](aioObjectRoot*, void *arg) {
+      delete static_cast<PoolHttpConnection*>(arg);
+    }, this);
   }
   void run();
 
@@ -21,15 +24,43 @@ private:
   int onParse(HttpRequestComponent *component);
   void close();
 
+  void reply200(xmstream &stream);
   void reply404();
   size_t startChunk(xmstream &stream);
   void finishChunk(xmstream &stream, size_t offset);
+
+  void onUserCreate();
+  void onUserResendEmail();
+  void onUserLogin();
+  void onUserLogout();
+  void onUserChangeEmail();
+  void onUserChangePassword();
+  void onUserRecoveryPassword();
+  void onUserGetCredentials();
+  void onUserGetSettings();
+  void onUserUpdateCredentials();
+  void onUserUpdateSettings();
+  void onBackendManualPayout();
 
 private:
   enum FunctionTy {
     fnUnknown = 0,
     fnApi,
-    fnUserCreate
+    // User manager functions
+    fnUserCreate,
+    fnUserResendEmail,
+    fnUserLogin,
+    fnUserLogout,
+    fnUserChangeEmail,
+    fnUserChangePassword,
+    fnUserRecoveryPassword,
+    fnUserGetCredentials,
+    fnUserGetSettings,
+    fnUserUpdateCredentials,
+    fnUserUpdateSettings,
+    // Backend functions
+    fnBackendManualPayout
+    // Statistic functions
   };
 
   static std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> FunctionNameMap_;
@@ -46,7 +77,7 @@ private:
   struct {
     int method = hmUnknown;
     FunctionTy function = fnUnknown;
-    unsigned argumentsNum = 0;
+    std::string Request;
   } Context;
 };
 
@@ -59,6 +90,8 @@ public:
                  std::unordered_map<std::string, size_t> &coinIdxMap);
 
   bool start();
+
+  UserManager &userManager() { return UserMgr_; }
 
 private:
   static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);

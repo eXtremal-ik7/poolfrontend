@@ -13,6 +13,9 @@
 #include <time.h>
 
 #include <thread>
+#if !defined(OS_WINDOWS)
+#include <netdb.h>
+#endif
 
 static std::atomic<unsigned> threadCounter = 0;
 static __tls unsigned threadId;
@@ -80,6 +83,51 @@ int main(int argc, char *argv[])
 
     // Initialize user manager
     poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
+
+    // Base config
+    const char *poolName = cfg->lookupString(frontendSection, "poolName");
+    const char *poolHostAddress = cfg->lookupString(frontendSection, "poolHostAddress");
+    const char *userActivateLinkPrefix = cfg->lookupString(frontendSection, "poolActivateLinkPrefix");
+    poolContext.UserMgr->setBaseCfg(poolName, poolHostAddress, userActivateLinkPrefix);
+
+    // SMTP config
+    if (cfg->lookupBoolean(frontendSection, "smtpEnabled", false)) {
+      HostAddress smtpAddress;
+      const char *smtpServer = cfg->lookupString(frontendSection, "smtpServer");
+      const char *login = cfg->lookupString(frontendSection, "smtpLogin");
+      const char *password = cfg->lookupString(frontendSection, "smtpPassword");
+      const char *senderAddress = cfg->lookupString(frontendSection, "smtpSenderAddress");
+      bool useSmtps = cfg->lookupBoolean(frontendSection, "smtpUseSmtps", false);
+      bool useStartTls = cfg->lookupBoolean(frontendSection, "smtpUseStartTLS", true);
+
+      // Build HostAddress for server
+      {
+        char *colonPos = (char*)strchr(smtpServer, ':');
+        if (colonPos == nullptr) {
+          LOG_F(ERROR, "Invalid server %s\nIt must have address:port format", smtpServer);
+          return 1;
+        }
+
+        *colonPos = 0;
+        hostent *host = gethostbyname(smtpServer);
+        if (!host) {
+          LOG_F(ERROR, "Cannot retrieve address of %s (gethostbyname failed)", smtpServer);
+        }
+
+        u_long addr = host->h_addr ? *reinterpret_cast<u_long*>(host->h_addr) : 0;
+        if (!addr) {
+          LOG_F(ERROR, "Cannot retrieve address of %s (gethostbyname returns 0)", smtpServer);
+          return 1;
+        }
+
+        smtpAddress.family = AF_INET;
+        smtpAddress.ipv4 = static_cast<uint32_t>(addr);
+        smtpAddress.port = htons(atoi(colonPos + 1));
+      }
+
+      // Enable SMTP
+      poolContext.UserMgr->enableSMTP(smtpAddress, login, password, senderAddress, useSmtps, useStartTls);
+    }
 
     // Initialize all backends
     config4cpp::StringVector coinsList;

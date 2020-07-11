@@ -3,6 +3,18 @@ poolfrontend {
   dbPath = "/home/user/pooldb";
   httpPort = "18880";
   
+  poolName = "pool";
+  poolHostAddress = "localhost";
+  poolActivateLinkPrefix = "/actions/useracivate?id=";
+
+  smtpEnabled = "false";
+  smtpServer = "smtp.gmail.com:25";
+  smtpLogin = "login";
+  smtpPassword = "password";
+  smtpSenderAddress = "admin@pool.com";
+  smtpUseSmtps = "false";
+  smtpUseStartTLS = "true";
+
   coins = [
     "BTC",
     "XPM"

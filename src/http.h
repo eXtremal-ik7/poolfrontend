@@ -29,6 +29,7 @@ private:
   size_t startChunk(xmstream &stream);
   void finishChunk(xmstream &stream, size_t offset);
 
+  void onUserAction();
   void onUserCreate();
   void onUserResendEmail();
   void onUserLogin();
@@ -47,6 +48,7 @@ private:
     fnUnknown = 0,
     fnApi,
     // User manager functions
+    fnUserAction,
     fnUserCreate,
     fnUserResendEmail,
     fnUserLogin,

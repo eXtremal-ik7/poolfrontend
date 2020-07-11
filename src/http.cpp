@@ -4,10 +4,10 @@
 #include "loguru.hpp"
 #include "rapidjson/document.h"
 
-static bool parseUserCredentials(const char *json, UserManager::Credentials &credentials);
 
 std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> PoolHttpConnection::FunctionNameMap_ = {
   // User manager functions
+  {"useraction", {hmPost, fnUserAction}},
   {"usercreate", {hmPost, fnUserCreate}},
   {"userresendemail", {hmPost, fnUserResendEmail}},
   {"userlogin", {hmPost, fnUserLogin}},
@@ -26,6 +26,38 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
 static inline bool rawcmp(Raw data, const char *operand) {
   size_t opSize = strlen(operand);
   return data.size == opSize && memcmp(data.data, operand, opSize) == 0;
+}
+
+static inline void jsonSerializeString(xmstream &stream, const char *name, const char *value, bool lastField = false)
+{
+  stream.write("\"");
+  stream.write(name);
+  stream.write("\": \"");
+  stream.write(value);
+  stream.write("\"");
+  if (!lastField)
+    stream.write(',');
+}
+
+static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsString())
+      out = document[name].GetString();
+    else
+      *validAcc = false;
+  }
+}
+
+static inline bool parseUserCredentials(const char *json, UserManager::Credentials &credentials)
+{
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(json);
+  jsonParseString(document, "login", credentials.Login, &validAcc);
+  jsonParseString(document, "password", credentials.Password, &validAcc);
+  jsonParseString(document, "name", credentials.Name, &validAcc);
+  jsonParseString(document, "email", credentials.EMail, &validAcc);
+  return validAcc;
 }
 
 void PoolHttpConnection::run()
@@ -65,7 +97,8 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
   } else if (component->type == httpRequestDtDataLast) {
     Context.Request.append(component->data.data, component->data.data + component->data.size);
     switch (Context.function) {
-      case fnUserCreate : onUserCreate(); break;
+      case fnUserAction: onUserAction(); break;
+      case fnUserCreate: onUserCreate(); break;
       case fnUserResendEmail: onUserResendEmail(); break;
       case fnUserLogin: onUserLogin(); break;
       case fnUserLogout: onUserLogout(); break;
@@ -173,6 +206,35 @@ void PoolHttpConnection::close()
     deleteAioObject(Socket_);
 }
 
+void PoolHttpConnection::onUserAction()
+{
+  std::string actionId;
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  jsonParseString(document, "id", actionId, &validAcc);
+  if (!validAcc) {
+    // TODO: use different error code
+    reply404();
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userAction(actionId, [this](bool success, const std::string &status) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    stream.write('{');
+    jsonSerializeString(stream, "status", status.c_str(), true);
+    stream.write("}\n");
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
 void PoolHttpConnection::onUserCreate()
 {
   UserManager::Credentials credentials;
@@ -183,18 +245,14 @@ void PoolHttpConnection::onUserCreate()
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userCreate(std::move(credentials), [this](bool success, const std::string &error) {
+  Server_.userManager().userCreate(std::move(credentials), [this](bool success, const std::string &status) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
 
-    if (success) {
-      stream.write("{\"error\": null}");
-    } else {
-      stream.write("{\"error\": \"");
-      stream.write(error.data(), error.size());
-      stream.write("\"}\n");
-    }
+    stream.write('{');
+    jsonSerializeString(stream, "status", status.c_str(), true);
+    stream.write("}\n");
 
     finishChunk(stream, offset);
     aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
@@ -214,22 +272,57 @@ void PoolHttpConnection::onUserResendEmail()
 
 void PoolHttpConnection::onUserLogin()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  UserManager::Credentials credentials;
+  if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
+    // TODO: use different error code
+    reply404();
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userLogin(std::move(credentials), [this](const std::string &sessionId, const std::string &status) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    stream.write('{');
+    jsonSerializeString(stream, "sessionId", sessionId.c_str());
+    jsonSerializeString(stream, "status", status.c_str(), true);
+    stream.write("}\n");
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onUserLogout()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  std::string sessionId;
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  jsonParseString(document, "id", sessionId, &validAcc);
+  if (!validAcc) {
+    // TODO: use different error code
+    reply404();
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userLogout(sessionId, [this](bool success, const std::string &status) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    stream.write('{');
+    jsonSerializeString(stream, "status", status.c_str(), true);
+    stream.write("}\n");
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onUserChangeEmail()
@@ -361,25 +454,4 @@ void PoolHttpServer::acceptCb(AsyncOpStatus status, aioObject *object, HostAddre
   }
 
   aioAccept(object, 0, acceptCb, arg);
-}
-
-static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, bool *validAcc) {
-  if (document.HasMember(name)) {
-    if (document[name].IsString())
-      out = document[name].GetString();
-    else
-      *validAcc = false;
-  }
-}
-
-static bool parseUserCredentials(const char *json, UserManager::Credentials &credentials)
-{
-  bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(json);
-  jsonParseString(document, "login", credentials.Login, &validAcc);
-  jsonParseString(document, "password", credentials.Password, &validAcc);
-  jsonParseString(document, "name", credentials.Name, &validAcc);
-  jsonParseString(document, "email", credentials.EMail, &validAcc);
-  return validAcc;
 }

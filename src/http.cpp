@@ -286,7 +286,7 @@ void PoolHttpConnection::onUserLogin()
     size_t offset = startChunk(stream);
 
     stream.write('{');
-    jsonSerializeString(stream, "sessionId", sessionId.c_str());
+    jsonSerializeString(stream, "sessionid", sessionId.c_str());
     jsonSerializeString(stream, "status", status.c_str(), true);
     stream.write("}\n");
 

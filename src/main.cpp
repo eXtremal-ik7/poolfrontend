@@ -1,5 +1,6 @@
 #include "http.h"
 #include "poolcore/backend.h"
+#include "poolcommon/utils.h"
 
 #include "config4cpp/Configuration.h"
 
@@ -31,6 +32,7 @@ struct PoolContext {
   std::unique_ptr<PoolHttpServer> HttpServer;
   std::unique_ptr<UserManager> UserMgr;
   std::vector<PoolBackend> Backends;
+  std::vector<CoinInfo> CoinList;
   std::unordered_map<std::string, size_t> CoinIdxMap;
 };
 
@@ -82,7 +84,7 @@ int main(int argc, char *argv[])
     workerThreadsNum = cfg->lookupInt(frontendSection, "workerThreadsNum", 0);
 
     // Initialize user manager
-    poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
+    poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath, poolContext.CoinList, poolContext.CoinIdxMap));
 
     // Base config
     const char *poolName = cfg->lookupString(frontendSection, "poolName");
@@ -139,6 +141,8 @@ int main(int argc, char *argv[])
       const char *scope = scopeName.c_str();
 
       PoolBackendConfig backendConfig;
+      CoinInfo coinInfo;
+      coinInfo.Name = coinsList[i];
       backendConfig.CoinName = coinsList[i];
 
       // Inherited pool config parameters
@@ -146,9 +150,20 @@ int main(int argc, char *argv[])
       backendConfig.dbPath = poolContext.DatabasePath;
 
       // Backend parameters
+      const char *defaultPayoutThreshold = cfg->lookupString(scope, "defaultPayoutThreshold");
+      if (!parseMoneyValue(defaultPayoutThreshold, COIN, &coinInfo.DefaultPayoutThreshold)) {
+        LOG_F(ERROR, "Can't load 'defaultMinimalPayout' from %s coin config", coinsList[i]);
+        return 1;
+      }
+
       backendConfig.RequiredConfirmations = cfg->lookupInt(scope, "requiredConfirmations", 10);
-      backendConfig.DefaultMinimalPayout = static_cast<int64_t>(cfg->lookupFloat(scope, "defaultMinimalPayout", 0.01) * COIN);
-      backendConfig.MinimalPayout = static_cast<int64_t>(cfg->lookupFloat(scope, "minimalPayout", 0.001) * COIN);
+      backendConfig.DefaultPayoutThreshold = coinInfo.DefaultPayoutThreshold;
+      const char *mininalAllowedPayout = cfg->lookupString(scope, "minimalAllowedPayout");
+      if (!parseMoneyValue(mininalAllowedPayout, COIN, &backendConfig.MinimalAllowedPayout)) {
+        LOG_F(ERROR, "Can't load 'minimalPayout' from %s coin config", coinsList[i]);
+        return 1;
+      }
+
       backendConfig.KeepRoundTime = cfg->lookupInt(scope, "keepRoundTime", 3) * 24*3600;
       backendConfig.KeepStatsTime = cfg->lookupInt(scope, "keepStatsTime", 2) * 60;
       backendConfig.ConfirmationsCheckInterval = cfg->lookupInt(scope, "confirmationsCheckInterval", 10) * 60 * 1000000;
@@ -161,6 +176,7 @@ int main(int argc, char *argv[])
 
       // Initialize backend
       poolContext.Backends.emplace_back(std::move(backendConfig), *poolContext.UserMgr);
+      poolContext.CoinList.push_back(coinInfo);
     }
 
   } catch(const config4cpp::ConfigurationException& ex){

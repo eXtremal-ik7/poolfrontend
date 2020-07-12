@@ -33,8 +33,8 @@ coins {
     poolFeeAddrs = [];
     poolFees = [];
     requiredConfirmations = "10";
-    defaultMinimalPayout = "0.001";
-    minimalPayout = "0.001";
+    defaultPayoutThreshold = "0.001";
+    minimalAllowedPayout = "0.001";
     keepRoundTime = "3";
     keepStatsTime = "2";
     confirmationsCheckInterval = "7";
@@ -52,8 +52,8 @@ coins {
     poolFeeAddrs = [];
     poolFees = [];
     requiredConfirmations = "10";
-    defaultMinimalPayout = "4";
-    minimalPayout = "0.01";
+    defaultPayoutThreshold = "4";
+    minimalAllowedPayout = "0.01";
     keepRoundTime = "3";
     keepStatsTime = "2";
     confirmationsCheckInterval = "7";

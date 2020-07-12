@@ -1,4 +1,5 @@
 #include "http.h"
+#include "poolcommon/utils.h"
 #include "asyncio/coroutine.h"
 #include "asyncio/socket.h"
 #include "loguru.hpp"
@@ -7,24 +8,43 @@
 
 std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> PoolHttpConnection::FunctionNameMap_ = {
   // User manager functions
-  {"useraction", {hmPost, fnUserAction}},
-  {"usercreate", {hmPost, fnUserCreate}},
-  {"userresendemail", {hmPost, fnUserResendEmail}},
-  {"userlogin", {hmPost, fnUserLogin}},
-  {"userlogout", {hmPost, fnUserLogout}},
-  {"userchangeemail", {hmPost, fnUserChangeEmail}},
-  {"userchangepassword", {hmPost, fnUserChangePassword}},
-  {"usergetcredentials", {hmGet, fnUserGetCredentials}},
-  {"usergetsettings", {hmGet, fnUserGetSettings}},
-  {"userupdatecredentials", {hmPost, fnUserUpdateCredentials}},
-  {"userupdatesettings", {hmPost, fnUserUpdateSettings}},
+  {"userAction", {hmPost, fnUserAction}},
+  {"userCreate", {hmPost, fnUserCreate}},
+  {"userResendEmail", {hmPost, fnUserResendEmail}},
+  {"userLogin", {hmPost, fnUserLogin}},
+  {"userLogout", {hmPost, fnUserLogout}},
+  {"userChangeEmail", {hmPost, fnUserChangeEmail}},
+  {"userChangePassword", {hmPost, fnUserChangePassword}},
+  {"userGetCredentials", {hmPost, fnUserGetCredentials}},
+  {"userGetSettings", {hmPost, fnUserGetSettings}},
+  {"userUpdateCredentials", {hmPost, fnUserUpdateCredentials}},
+  {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
   // Backend functions
-  {"backendmanualpayout", {hmPost, fnBackendManualPayout}}
+  {"backendManualPayout", {hmPost, fnBackendManualPayout}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
   size_t opSize = strlen(operand);
   return data.size == opSize && memcmp(data.data, operand, opSize) == 0;
+}
+
+static inline void jsonSerializeNull(xmstream &stream, const char *name, bool lastField = false)
+{
+  stream.write("\"");
+  stream.write(name);
+  stream.write("\": null");
+  if (!lastField)
+    stream.write(',');
+}
+
+static inline void jsonSerializeBoolean(xmstream &stream, const char *name, bool value, bool lastField = false)
+{
+  stream.write("\"");
+  stream.write(name);
+  stream.write("\": ");
+  stream.write(value ? "true" : "false");
+  if (!lastField)
+    stream.write(',');
 }
 
 static inline void jsonSerializeString(xmstream &stream, const char *name, const char *value, bool lastField = false)
@@ -38,10 +58,32 @@ static inline void jsonSerializeString(xmstream &stream, const char *name, const
     stream.write(',');
 }
 
+template<typename T>
+static inline void jsonSerializeInt(xmstream &stream, const char *name, T number, bool lastField = false)
+{
+  char N[32];
+  xitoa(number, N);
+  stream.write("\"");
+  stream.write(name);
+  stream.write("\": ");
+  stream.write(static_cast<const char*>(N));
+  if (!lastField)
+    stream.write(',');
+}
+
 static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsString())
       out = document[name].GetString();
+    else
+      *validAcc = false;
+  }
+}
+
+static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsBool())
+      *out = document[name].GetBool();
     else
       *validAcc = false;
   }
@@ -212,23 +254,13 @@ void PoolHttpConnection::onUserAction()
   document.Parse(Context.Request.c_str());
   jsonParseString(document, "id", actionId, &validAcc);
   if (!validAcc) {
-    // TODO: use different error code
-    reply404();
+    replyWithStatus("json_format_error");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().userAction(actionId, [this](const char *status) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
-
-    stream.write('{');
-    jsonSerializeString(stream, "status", status, true);
-    stream.write("}\n");
-
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }
@@ -237,23 +269,13 @@ void PoolHttpConnection::onUserCreate()
 {
   UserManager::Credentials credentials;
   if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
-    // TODO: use different error code
-    reply404();
+    replyWithStatus("json_format_error");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().userCreate(std::move(credentials), [this](const char *status) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
-
-    stream.write('{');
-    jsonSerializeString(stream, "status", status, true);
-    stream.write("}\n");
-
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }
@@ -262,23 +284,13 @@ void PoolHttpConnection::onUserResendEmail()
 {
   UserManager::Credentials credentials;
   if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
-    // TODO: use different error code
-    reply404();
+    replyWithStatus("json_format_error");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().userResendEmail(std::move(credentials), [this](const char *status) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
-
-    stream.write('{');
-    jsonSerializeString(stream, "status", status, true);
-    stream.write("}\n");
-
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }
@@ -287,8 +299,7 @@ void PoolHttpConnection::onUserLogin()
 {
   UserManager::Credentials credentials;
   if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
-    // TODO: use different error code
-    reply404();
+    replyWithStatus("json_format_error");
     return;
   }
 
@@ -317,23 +328,13 @@ void PoolHttpConnection::onUserLogout()
   document.Parse(Context.Request.c_str());
   jsonParseString(document, "id", sessionId, &validAcc);
   if (!validAcc) {
-    // TODO: use different error code
-    reply404();
+    replyWithStatus("json_format_error");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().userLogout(sessionId, [this](const char *status) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
-
-    stream.write('{');
-    jsonSerializeString(stream, "status", status, true);
-    stream.write("}\n");
-
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }
@@ -360,20 +361,86 @@ void PoolHttpConnection::onUserChangePassword()
 
 void PoolHttpConnection::onUserGetCredentials()
 {
+  std::string sessionId;
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  jsonParseString(document, "id", sessionId, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
+  stream.write('{');
+
+  std::string login;
+  UserManager::Credentials credentials;
+  if (Server_.userManager().validateSession(sessionId, login)) {
+    if (Server_.userManager().getUserCredentials(login, credentials)) {
+      jsonSerializeString(stream, "status", "ok");
+      jsonSerializeString(stream, "name", credentials.Name.c_str());
+      jsonSerializeString(stream, "email", credentials.EMail.c_str());
+      jsonSerializeInt(stream, "registrationDate", credentials.RegistrationDate, true);
+    } else {
+      jsonSerializeString(stream, "status", "unknown_id", true);
+    }
+  } else {
+    jsonSerializeString(stream, "status", "unknown_id", true);
+  }
+
+  stream.write("}\n");
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
 void PoolHttpConnection::onUserGetSettings()
 {
+  std::string sessionId;
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  jsonParseString(document, "id", sessionId, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
+  stream.write("[");
+
+  std::string login;
+  if (Server_.userManager().validateSession(sessionId, login)) {
+    bool firstIteration = true;
+    for (const auto &coinInfo: Server_.userManager().coinInfo()) {
+      if (!firstIteration)
+        stream.write(',');
+      stream.write('{');
+      jsonSerializeString(stream, "status", "ok");
+      jsonSerializeString(stream, "name", coinInfo.Name.c_str());
+
+      UserSettingsRecord settings;
+      if (Server_.userManager().getUserCoinSettings(login, coinInfo.Name, settings)) {
+        jsonSerializeString(stream, "address", settings.Address.c_str());
+        jsonSerializeString(stream, "payoutThreshold", FormatMoney(settings.MinimalPayout, COIN).c_str());
+        jsonSerializeBoolean(stream, "autoPayoutEnabled", settings.AutoPayout, true);
+      } else {
+        jsonSerializeNull(stream, "address");
+        jsonSerializeNull(stream, "payoutThreshold");
+        jsonSerializeBoolean(stream, "autoPayoutEnabled", false, true);
+      }
+      stream.write("}");
+      firstIteration = false;
+    }
+  } else {
+    jsonSerializeString(stream, "status", "unknown_id", true);
+  }
+
+  stream.write("]\n");
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
@@ -390,12 +457,45 @@ void PoolHttpConnection::onUserUpdateCredentials()
 
 void PoolHttpConnection::onUserUpdateSettings()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  std::string sessionId;
+  UserSettingsRecord settings;
+
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+
+  std::string payoutThreshold;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "coin", settings.Coin, &validAcc);
+  jsonParseString(document, "address", settings.Address, &validAcc);
+  jsonParseString(document, "payoutThreshold", payoutThreshold, &validAcc);
+  jsonParseBoolean(document, "autoPayoutEnabled", &settings.AutoPayout, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  if (!Server_.userManager().coinIdxMap().count(settings.Coin)) {
+    replyWithStatus("request_format_error");
+    return;
+  }
+
+  if (!parseMoneyValue(payoutThreshold.c_str(), COIN, &settings.MinimalPayout)) {
+    replyWithStatus("request_format_error");
+    return;
+  }
+
+  // TODO: check address
+  if (!Server_.userManager().validateSession(sessionId, settings.Login)) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().updateSettings(std::move(settings), [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onBackendManualPayout()
@@ -457,4 +557,16 @@ void PoolHttpServer::acceptCb(AsyncOpStatus status, aioObject *object, HostAddre
   }
 
   aioAccept(object, 0, acceptCb, arg);
+}
+
+void PoolHttpConnection::replyWithStatus(const char *status)
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write('{');
+  jsonSerializeString(stream, "status", status, true);
+  stream.write("}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }

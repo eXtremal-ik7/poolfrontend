@@ -42,6 +42,8 @@ private:
   void onUserUpdateSettings();
   void onBackendManualPayout();
 
+  void replyWithStatus(const char *status);
+
 private:
   enum FunctionTy {
     fnUnknown = 0,

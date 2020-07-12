@@ -14,7 +14,6 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userlogout", {hmPost, fnUserLogout}},
   {"userchangeemail", {hmPost, fnUserChangeEmail}},
   {"userchangepassword", {hmPost, fnUserChangePassword}},
-  {"userrecoverypassword", {hmPost, fnUserRecoveryPassword}},
   {"usergetcredentials", {hmGet, fnUserGetCredentials}},
   {"usergetsettings", {hmGet, fnUserGetSettings}},
   {"userupdatecredentials", {hmPost, fnUserUpdateCredentials}},
@@ -104,7 +103,6 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserLogout: onUserLogout(); break;
       case fnUserChangeEmail: onUserChangeEmail(); break;
       case fnUserChangePassword: onUserChangePassword(); break;
-      case fnUserRecoveryPassword: onUserRecoveryPassword(); break;
       case fnUserGetCredentials: onUserGetCredentials(); break;
       case fnUserGetSettings: onUserGetSettings(); break;
       case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
@@ -220,13 +218,13 @@ void PoolHttpConnection::onUserAction()
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userAction(actionId, [this](bool success, const std::string &status) {
+  Server_.userManager().userAction(actionId, [this](const char *status) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
 
     stream.write('{');
-    jsonSerializeString(stream, "status", status.c_str(), true);
+    jsonSerializeString(stream, "status", status, true);
     stream.write("}\n");
 
     finishChunk(stream, offset);
@@ -245,13 +243,13 @@ void PoolHttpConnection::onUserCreate()
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userCreate(std::move(credentials), [this](bool success, const std::string &status) {
+  Server_.userManager().userCreate(std::move(credentials), [this](const char *status) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
 
     stream.write('{');
-    jsonSerializeString(stream, "status", status.c_str(), true);
+    jsonSerializeString(stream, "status", status, true);
     stream.write("}\n");
 
     finishChunk(stream, offset);
@@ -262,12 +260,27 @@ void PoolHttpConnection::onUserCreate()
 
 void PoolHttpConnection::onUserResendEmail()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  UserManager::Credentials credentials;
+  if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
+    // TODO: use different error code
+    reply404();
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userResendEmail(std::move(credentials), [this](const char *status) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    stream.write('{');
+    jsonSerializeString(stream, "status", status, true);
+    stream.write("}\n");
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onUserLogin()
@@ -280,14 +293,14 @@ void PoolHttpConnection::onUserLogin()
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userLogin(std::move(credentials), [this](const std::string &sessionId, const std::string &status) {
+  Server_.userManager().userLogin(std::move(credentials), [this](const std::string &sessionId, const char *status) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
 
     stream.write('{');
     jsonSerializeString(stream, "sessionid", sessionId.c_str());
-    jsonSerializeString(stream, "status", status.c_str(), true);
+    jsonSerializeString(stream, "status", status, true);
     stream.write("}\n");
 
     finishChunk(stream, offset);
@@ -310,13 +323,13 @@ void PoolHttpConnection::onUserLogout()
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userLogout(sessionId, [this](bool success, const std::string &status) {
+  Server_.userManager().userLogout(sessionId, [this](const char *status) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
 
     stream.write('{');
-    jsonSerializeString(stream, "status", status.c_str(), true);
+    jsonSerializeString(stream, "status", status, true);
     stream.write("}\n");
 
     finishChunk(stream, offset);
@@ -336,16 +349,6 @@ void PoolHttpConnection::onUserChangeEmail()
 }
 
 void PoolHttpConnection::onUserChangePassword()
-{
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
-}
-
-void PoolHttpConnection::onUserRecoveryPassword()
 {
   xmstream stream;
   reply200(stream);

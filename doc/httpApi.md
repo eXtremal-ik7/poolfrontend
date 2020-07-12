@@ -40,6 +40,33 @@ curl -X POST -d "{\"login\": \"user\", \"password\": \"12345678\", \"email\": \"
 http://localhost/actions/useracivate?id=6310abb30747f6498a5ec114fdfcc844babdbd9566bcc69e9a2472536a6a850892f339e0866215140497e186710cc15af5582de5e222e4e4a6089dcfd0270017
 ```
 
+## userresendemail
+Create new user activation id and send it by email. Useful when first email with activation link not received by user.
+
+### query type: POST
+### arguments:
+* login: Unique user identifier (up to 64 characters)
+* password: Password (8-64 characters length)
+
+### return values:
+* status: can be "ok" or one of defined error codes:
+  * invalid_password
+  * user_already_active
+  * smtp_client_create_error: internal error with SMTP protocol client
+  * email_send_error: error received from SMTP server, details in pool log
+
+### curl example:
+```
+curl -X POST -d "{\"login\": \"user\", \"password\": \"12345678\", \"email\": \"my@email.com\"}" http://localhost:18880/api/userresendemail
+```
+### response examples:
+```
+{"status": "ok"}
+```
+```
+{"status": "user_already_active"}
+```
+
 ## useraction
 Confirm various user actions, such as user activation, changing password, etc
 
@@ -77,7 +104,6 @@ Log in procedure, function accepted login/password and returns session id unique
 ### return values:
 * sessionid: unique session identifier, needed for other api functions
 * status: can be "ok" or one of defined error codes:
-  * unknown_login: login does not exists in pool database (this error code can be removed, not safe)
   * invalid_password: login/password mismatch
   * user_not_active: user registered, but not activated using special link sent to email
 
@@ -106,7 +132,6 @@ Close user session, invalidate session id
 ### return values:
 * status: can be "ok" or one of defined error codes:
   * unknown_id: invalid session id
-  * unknown_login: session id refers to non-existent user (possible corrupted database)
 
 ### curl example:
 ```

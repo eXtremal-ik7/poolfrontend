@@ -36,7 +36,6 @@ private:
   void onUserLogout();
   void onUserChangeEmail();
   void onUserChangePassword();
-  void onUserRecoveryPassword();
   void onUserGetCredentials();
   void onUserGetSettings();
   void onUserUpdateCredentials();
@@ -55,7 +54,6 @@ private:
     fnUserLogout,
     fnUserChangeEmail,
     fnUserChangePassword,
-    fnUserRecoveryPassword,
     fnUserGetCredentials,
     fnUserGetSettings,
     fnUserUpdateCredentials,

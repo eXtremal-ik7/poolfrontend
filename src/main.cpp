@@ -1,5 +1,6 @@
 #include "http.h"
 #include "poolcore/backend.h"
+#include "poolcore/coinLibrary.h"
 #include "poolcommon/utils.h"
 
 #include "config4cpp/Configuration.h"
@@ -32,7 +33,7 @@ struct PoolContext {
   std::unique_ptr<PoolHttpServer> HttpServer;
   std::unique_ptr<UserManager> UserMgr;
   std::vector<PoolBackend> Backends;
-  std::vector<CoinInfo> CoinList;
+  std::vector<CCoinInfo> CoinList;
   std::unordered_map<std::string, size_t> CoinIdxMap;
 };
 
@@ -84,7 +85,7 @@ int main(int argc, char *argv[])
     workerThreadsNum = cfg->lookupInt(frontendSection, "workerThreadsNum", 0);
 
     // Initialize user manager
-    poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath, poolContext.CoinList, poolContext.CoinIdxMap));
+    poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
 
     // Base config
     const char *poolName = cfg->lookupString(frontendSection, "poolName");
@@ -135,48 +136,76 @@ int main(int argc, char *argv[])
     config4cpp::StringVector coinsList;
     cfg->lookupList(frontendSection, "coins", coinsList);
     for (int i = 0, ie = coinsList.length(); i != ie; ++i) {
-      poolContext.CoinIdxMap[coinsList[i]] = i;
-
       std::string scopeName = std::string("coins.") + coinsList[i];
       const char *scope = scopeName.c_str();
 
       PoolBackendConfig backendConfig;
-      CoinInfo coinInfo;
-      coinInfo.Name = coinsList[i];
-      backendConfig.CoinName = coinsList[i];
+      CCoinInfo coinInfo = CCoinLibrary::get(coinsList[i]);
+      if (coinInfo.Name.empty()) {
+        LOG_F(ERROR, "Unknown coin: %s", coinsList[i]);
+        return 1;
+      }
 
       // Inherited pool config parameters
       backendConfig.isMaster = poolContext.IsMaster;
       backendConfig.dbPath = poolContext.DatabasePath;
 
       // Backend parameters
-      const char *defaultPayoutThreshold = cfg->lookupString(scope, "defaultPayoutThreshold");
-      if (!parseMoneyValue(defaultPayoutThreshold, COIN, &coinInfo.DefaultPayoutThreshold)) {
-        LOG_F(ERROR, "Can't load 'defaultMinimalPayout' from %s coin config", coinsList[i]);
+      const char *defaultPayoutThresholdS = cfg->lookupString(scope, "defaultPayoutThreshold");
+      if (!parseMoneyValue(defaultPayoutThresholdS, coinInfo.RationalPartSize, &backendConfig.DefaultPayoutThreshold)) {
+        LOG_F(ERROR, "Can't load 'defaultPayoutThreshold' from %s coin config", coinsList[i]);
         return 1;
       }
 
-      backendConfig.RequiredConfirmations = cfg->lookupInt(scope, "requiredConfirmations", 10);
-      backendConfig.DefaultPayoutThreshold = coinInfo.DefaultPayoutThreshold;
       const char *mininalAllowedPayout = cfg->lookupString(scope, "minimalAllowedPayout");
-      if (!parseMoneyValue(mininalAllowedPayout, COIN, &backendConfig.MinimalAllowedPayout)) {
+      if (!parseMoneyValue(mininalAllowedPayout, coinInfo.RationalPartSize, &backendConfig.MinimalAllowedPayout)) {
         LOG_F(ERROR, "Can't load 'minimalPayout' from %s coin config", coinsList[i]);
         return 1;
       }
 
+      backendConfig.RequiredConfirmations = cfg->lookupInt(scope, "requiredConfirmations", 10);
       backendConfig.KeepRoundTime = cfg->lookupInt(scope, "keepRoundTime", 3) * 24*3600;
       backendConfig.KeepStatsTime = cfg->lookupInt(scope, "keepStatsTime", 2) * 60;
       backendConfig.ConfirmationsCheckInterval = cfg->lookupInt(scope, "confirmationsCheckInterval", 10) * 60 * 1000000;
       backendConfig.PayoutInterval = cfg->lookupInt(scope, "payoutInterval", 60) * 60 * 1000000;
       backendConfig.BalanceCheckInterval = cfg->lookupInt(scope, "balanceCheckInterval", 3) * 60 * 1000000;
       backendConfig.StatisticCheckInterval = cfg->lookupInt(scope, "statisticCheckInterval", 1) * 60 * 1000000;
+
+      // Pool fee
+      config4cpp::StringVector addresses;
+      config4cpp::StringVector fees;
+      cfg->lookupList(scope, "poolFeeAddrs", addresses, config4cpp::StringVector());
+      cfg->lookupList(scope, "poolFees", fees, config4cpp::StringVector());
+      if (addresses.length() != fees.length()) {
+        LOG_F(ERROR, "Pool fee addresses and fees arrays have different length");
+        return 1;
+      }
+
+      for (int i = 0; i < addresses.length(); i++) {
+        PoolFeeEntry poolFeeEntry;
+        char *endptr = nullptr;
+        poolFeeEntry.Address = addresses[i];
+        poolFeeEntry.Percentage = strtof(fees[i], &endptr);
+        if (!coinInfo.checkAddress(poolFeeEntry.Address, coinInfo.PayoutAddressType)) {
+          LOG_F(ERROR, "Invalid pool fee address: %s", addresses[i]);
+          return 1;
+        }
+
+        if (!(endptr && *endptr == '\0')) {
+          LOG_F(ERROR, "Invalid fee value: %s", fees[i]);
+          return 1;
+        }
+      }
+
       // ZEC specific
       backendConfig.poolZAddr = cfg->lookupString(scope, "pool_zaddr", "");
       backendConfig.poolTAddr = cfg->lookupString(scope, "pool_taddr", "");
 
       // Initialize backend
-      poolContext.Backends.emplace_back(std::move(backendConfig), *poolContext.UserMgr);
+      poolContext.Backends.emplace_back(std::move(backendConfig), coinInfo, *poolContext.UserMgr);
+      poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
       poolContext.CoinList.push_back(coinInfo);
+      poolContext.CoinIdxMap[coinsList[i]] = i;
     }
 
   } catch(const config4cpp::ConfigurationException& ex){

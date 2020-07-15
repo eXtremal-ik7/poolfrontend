@@ -28,10 +28,10 @@ poolfrontend {
 
 coins {
   BTC {
-    nodes = ["http://user@password:localhost:9332"];
+    nodes = ["http://user:password@localhost:9332"];
     algorithm = "sha256";
-    poolFeeAddrs = [];
-    poolFees = [];
+    poolFeeAddrs = ["1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u", "3JQtCjDHwHoKx49bHYHrGmyiaWpjAdARev"];
+    poolFees = ["1", "1"];
     requiredConfirmations = "10";
     defaultPayoutThreshold = "0.001";
     minimalAllowedPayout = "0.001";
@@ -47,10 +47,10 @@ coins {
   }
   
   XPM {
-    nodes = ["http://user@password:9912"];
+    nodes = ["http://user:password@localhost:9912"];
     algorithm = "primecoin";
-    poolFeeAddrs = [];
-    poolFees = [];
+    poolFeeAddrs = ["AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11"];
+    poolFees = ["1"];
     requiredConfirmations = "10";
     defaultPayoutThreshold = "4";
     minimalAllowedPayout = "0.01";

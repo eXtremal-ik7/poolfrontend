@@ -426,7 +426,7 @@ void PoolHttpConnection::onUserGetSettings()
       UserSettingsRecord settings;
       if (Server_.userManager().getUserCoinSettings(login, coinInfo.Name, settings)) {
         jsonSerializeString(stream, "address", settings.Address.c_str());
-        jsonSerializeString(stream, "payoutThreshold", FormatMoney(settings.MinimalPayout, COIN).c_str());
+        jsonSerializeString(stream, "payoutThreshold", FormatMoney(settings.MinimalPayout, coinInfo.RationalPartSize).c_str());
         jsonSerializeBoolean(stream, "autoPayoutEnabled", settings.AutoPayout, true);
       } else {
         jsonSerializeNull(stream, "address");
@@ -475,17 +475,23 @@ void PoolHttpConnection::onUserUpdateSettings()
     return;
   }
 
-  if (!Server_.userManager().coinIdxMap().count(settings.Coin)) {
+  auto It = Server_.userManager().coinIdxMap().find(settings.Coin);
+  if (It == Server_.userManager().coinIdxMap().end()) {
     replyWithStatus("request_format_error");
     return;
   }
 
-  if (!parseMoneyValue(payoutThreshold.c_str(), COIN, &settings.MinimalPayout)) {
+  CCoinInfo &coinInfo = Server_.userManager().coinInfo()[It->second];
+  if (!parseMoneyValue(payoutThreshold.c_str(), coinInfo.RationalPartSize, &settings.MinimalPayout)) {
     replyWithStatus("request_format_error");
     return;
   }
 
-  // TODO: check address
+  if (!coinInfo.checkAddress(settings.Address, coinInfo.PayoutAddressType)) {
+    replyWithStatus("invalid_address");
+    return;
+  }
+
   if (!Server_.userManager().validateSession(sessionId, settings.Login)) {
     replyWithStatus("unknown_id");
     return;

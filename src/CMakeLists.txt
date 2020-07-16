@@ -49,7 +49,6 @@ endif(MSVC)
 
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectPoolcore.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectConfig4cpp.cmake)
-hunter_add_package(RapidJSON)
 
 find_package(RapidJSON CONFIG REQUIRED)
 
@@ -79,7 +78,6 @@ target_link_libraries(poolfrontend
   p2p
   p2putils
   ${CONFIG4CPP_LIBRARY}
-  RapidJSON::rapidjson
 )
 
 add_dependencies(poolfrontend

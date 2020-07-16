@@ -2,16 +2,16 @@ poolfrontend {
   isMaster = "true";
   dbPath = "/home/user/pooldb";
   httpPort = "18880";
-  
+
   poolName = "pool";
   poolHostAddress = "localhost";
   poolActivateLinkPrefix = "/actions/useracivate?id=";
 
   smtpEnabled = "false";
   smtpServer = "smtp.gmail.com:25";
-  smtpLogin = "login";
+  smtpLogin = "user";
   smtpPassword = "password";
-  smtpSenderAddress = "admin@pool.com";
+  smtpSenderAddress = "user@gmail.com";
   smtpUseSmtps = "false";
   smtpUseStartTLS = "true";
 
@@ -19,7 +19,7 @@ poolfrontend {
     "BTC",
     "XPM"
   ];
-  
+
   listeners = [
     "BTC.stratum",
     "XPM.zmq"
@@ -28,10 +28,23 @@ poolfrontend {
 
 coins {
   BTC {
-    nodes = ["http://user:password@localhost:9332"];
-    algorithm = "sha256";
-    poolFeeAddrs = ["1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u", "3JQtCjDHwHoKx49bHYHrGmyiaWpjAdARev"];
-    poolFees = ["1", "1"];
+    node.1 {
+      type = "bitcoinrpc";
+      address = "localhost";
+      login = "user";
+      password = "password";
+    }
+
+    fee.1 {
+      address = "1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u";
+      percentage = "1";
+    }
+
+    fee.2 {
+      address = "3JQtCjDHwHoKx49bHYHrGmyiaWpjAdARev";
+      percentage = "1";
+    }
+
     requiredConfirmations = "10";
     defaultPayoutThreshold = "0.001";
     minimalAllowedPayout = "0.001";
@@ -45,12 +58,20 @@ coins {
     shareTarget = "2048";
     stratumWorkLifeTime = "9";
   }
-  
+
   XPM {
-    nodes = ["http://user:password@localhost:9912"];
-    algorithm = "primecoin";
-    poolFeeAddrs = ["AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11"];
-    poolFees = ["1"];
+    node.1 {
+      type = "bitcoinrpc";
+      address = "localhost";
+      login = "user";
+      password = "password";
+    }
+
+    fee.1 {
+      address = "AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11";
+      percentage = "1";
+    }
+
     requiredConfirmations = "10";
     defaultPayoutThreshold = "4";
     minimalAllowedPayout = "0.01";
@@ -72,12 +93,12 @@ listeners {
       host = "127.0.0.1";
       port = "3456";
     }
-    
+
     XPM.zmq {
       coin = "XPM";
       type = "zmq";
       host = "127.0.0.1";
       listenPort = "6666";
       workPort = "60000";
-    }    
+    }
 }

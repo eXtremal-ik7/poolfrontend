@@ -48,7 +48,6 @@ else(MSVC)
 endif(MSVC)
 
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectPoolcore.cmake)
-include(${CMAKE_SOURCE_DIR}/cmake/ProjectConfig4cpp.cmake)
 
 find_package(RapidJSON CONFIG REQUIRED)
 
@@ -62,10 +61,10 @@ include_directories(
   ${poolcore_BINARY_DIR}
   ${libp2p_SOURCE_DIR}/include
   ${libp2p_BINARY_DIR}/include
-  ${CONFIG4CPP_INCLUDE_DIR}
 )
 
 add_executable(poolfrontend 
+  config.cpp
   main.cpp
   http.cpp
 )
@@ -77,11 +76,6 @@ target_link_libraries(poolfrontend
   asyncioextras-0.5
   p2p
   p2putils
-  ${CONFIG4CPP_LIBRARY}
-)
-
-add_dependencies(poolfrontend
-  config4cpp
 )
 
 # OS-specific configuration

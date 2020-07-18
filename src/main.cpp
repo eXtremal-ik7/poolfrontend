@@ -4,6 +4,7 @@
 #include "poolcore/bitcoinRPCClient.h"
 #include "poolcore/coinLibrary.h"
 #include "poolcore/clientDispatcher.h"
+#include "poolcore/thread.h"
 #include "poolcommon/utils.h"
 #include "poolinstances/fabric.h"
 
@@ -21,9 +22,6 @@
 #include <netdb.h>
 #endif
 
-static std::atomic<unsigned> threadCounter = 0;
-static __tls unsigned threadId;
-
 static int interrupted = 0;
 static void sigIntHandler(int) { interrupted = 1; }
 
@@ -37,21 +35,12 @@ struct PoolContext {
   std::vector<PoolBackend> Backends;
   std::unordered_map<std::string, size_t> CoinIdxMap;
 
+  std::unique_ptr<CPoolThread[]> Workers;
   std::vector<std::unique_ptr<CPoolInstance>> Instances;
 
   std::unique_ptr<UserManager> UserMgr;
   std::unique_ptr<PoolHttpServer> HttpServer;
 };
-
-void InitializeWorkerThread()
-{
-  threadId = threadCounter.fetch_add(1);
-}
-
-unsigned GetWorkerThreadId()
-{
-  return threadId;
-}
 
 int main(int argc, char *argv[])
 {
@@ -119,15 +108,15 @@ int main(int argc, char *argv[])
     poolContext.HttpPort = config.HttpPort;
     workerThreadsNum = config.WorkerThreadsNum;
     if (workerThreadsNum == 0)
-      workerThreadsNum = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() : 4;
+      workerThreadsNum = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() / 4 : 2;
 
     // Calculate total threads num
     totalThreadsNum =
-      1 +                   // Main thread
-      1 +                   // Listeners and clients polling
+      1 +                   // Monitor (listeners and clients polling)
       workerThreadsNum +    // Share checkers
       config.Coins.size() + // Backends
-      1;
+      1;                    // HTTP server
+    LOG_F(INFO, "Worker threads: %u; total pool threads: %u", workerThreadsNum, totalThreadsNum);
 
     // Initialize user manager
     poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
@@ -225,7 +214,7 @@ int main(int argc, char *argv[])
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.Nodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
-          client = new CBitcoinRpcClient(base, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str());
+          client = new CBitcoinRpcClient(base, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str());
         } else {
           LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
           return 1;
@@ -242,10 +231,16 @@ int main(int argc, char *argv[])
       poolContext.CoinIdxMap[coinName] = coinIdx;
     }
 
+    // Initialize workers
+    poolContext.Workers.reset(new CPoolThread[workerThreadsNum]);
+    for (unsigned i = 0; i < workerThreadsNum; i++)
+      poolContext.Workers[i].start(i);
+
+    // Initialize instances
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(base, instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(workerThreadsNum, poolContext.Workers.get(), instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
@@ -276,38 +271,43 @@ int main(int argc, char *argv[])
     dispatcher->poll();
   }
 
-  poolContext.HttpServer.reset(new PoolHttpServer(base, poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.CoinIdxMap));
+  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.CoinIdxMap));
   poolContext.HttpServer->start();
 
-  std::unique_ptr<std::thread[]> workerThreads(new std::thread[workerThreadsNum]);
-  for (unsigned i = 0; i < workerThreadsNum; i++) {
-    workerThreads[i] = std::thread([](asyncBase *base, unsigned) {
-      char threadName[16];
-      InitializeWorkerThread();
-      snprintf(threadName, sizeof(threadName), "worker%u", GetWorkerThreadId());
-      loguru::set_thread_name(threadName);
-      asyncLoop(base);
-    }, base, i);
-  }
+  // Start monitor thread
+  std::thread monitorThread([](asyncBase *base) {
+    InitializeWorkerThread();
+    loguru::set_thread_name("monitor");
+    LOG_F(INFO, "monitor started tid=%u", GetWorkerThreadId());
+    asyncLoop(base);
+  }, base);
 
   // Handle CTRL+C (SIGINT)
   signal(SIGINT, sigIntHandler);
   signal(SIGTERM, sigIntHandler);
-  std::thread sigIntThread([&base, &poolContext]() {
+
+  std::thread sigIntThread([&base, &poolContext, workerThreadsNum]() {
+    loguru::set_thread_name("sigint_monitor");
     while (!interrupted)
       std::this_thread::sleep_for(std::chrono::seconds(1));
     LOG_F(INFO, "Interrupted by user");
+    // Stop HTTP server
+    poolContext.HttpServer->stop();
+    // Stop workers
+    for (unsigned i = 0; i < workerThreadsNum; i++)
+      poolContext.Workers[i].stop();
+    // Stop backends
     for (auto &backend: poolContext.Backends)
       backend.stop();
+    // Stop user manager
     poolContext.UserMgr->stop();
+
+    // Stop monitor thread
     postQuitOperation(base);
   });
 
   sigIntThread.detach();
-
-  for (unsigned i = 0; i < workerThreadsNum; i++)
-    workerThreads[i].join();
-
+  monitorThread.join();
   LOG_F(INFO, "poolfrondend stopped\n");
   return 0;
 }

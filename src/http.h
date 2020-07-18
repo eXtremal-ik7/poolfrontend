@@ -98,13 +98,13 @@ private:
 
 class PoolHttpServer {
 public:
-  PoolHttpServer(asyncBase *base,
-                 uint16_t port,
+  PoolHttpServer(uint16_t port,
                  UserManager &userMgr,
                  std::vector<PoolBackend> &backends,
                  std::unordered_map<std::string, size_t> &coinIdxMap);
 
   bool start();
+  void stop();
 
   UserManager &userManager() { return UserMgr_; }
 
@@ -120,5 +120,6 @@ private:
   std::vector<PoolBackend> &Backends_;
   std::unordered_map<std::string, size_t> &CoinIdxMap_;
 
+  std::thread Thread_;
   aioObject *ListenerSocket_;
 };

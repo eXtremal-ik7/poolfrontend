@@ -1,5 +1,6 @@
 #include "http.h"
 #include "poolcommon/utils.h"
+#include "poolcore/thread.h"
 #include "asyncio/coroutine.h"
 #include "asyncio/socket.h"
 #include "loguru.hpp"
@@ -574,17 +575,16 @@ void PoolHttpConnection::onBackendQueryPoolStats()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-PoolHttpServer::PoolHttpServer(asyncBase *base,
-                               uint16_t port,
+PoolHttpServer::PoolHttpServer(uint16_t port,
                                UserManager &userMgr,
                                std::vector<PoolBackend> &backends,
                                std::unordered_map<std::string, size_t> &coinIdxMap) :
-  Base_(base),
   Port_(port),
   UserMgr_(userMgr),
   Backends_(backends),
   CoinIdxMap_(coinIdxMap)
 {
+  Base_ = createAsyncBase(amOSDefault);
 }
 
 bool PoolHttpServer::start()
@@ -608,7 +608,19 @@ bool PoolHttpServer::start()
 
   ListenerSocket_ = newSocketIo(Base_, hSocket);
   aioAccept(ListenerSocket_, 0, acceptCb, this);
+  Thread_ = std::thread([](PoolHttpServer *server) {
+    loguru::set_thread_name("http");
+    InitializeWorkerThread();
+    LOG_F(INFO, "http server started tid=%u", GetWorkerThreadId());
+    asyncLoop(server->Base_);
+  }, this);
   return true;
+}
+
+void PoolHttpServer::stop()
+{
+  postQuitOperation(Base_);
+  Thread_.join();
 }
 
 

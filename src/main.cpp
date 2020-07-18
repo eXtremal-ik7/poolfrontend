@@ -220,12 +220,12 @@ int main(int argc, char *argv[])
       // backendConfig.poolTAddr;
 
       // Nodes
-      std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(base, coinInfo));
+      std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(base, coinInfo, totalThreadsNum));
       for (size_t nodeIdx = 0, nodeIdxE = coinConfig.Nodes.size(); nodeIdx != nodeIdxE; ++nodeIdx) {
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.Nodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
-          client = new CBitcoinRpcClient(base, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str());
+          client = new CBitcoinRpcClient(base, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str());
         } else {
           LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
           return 1;

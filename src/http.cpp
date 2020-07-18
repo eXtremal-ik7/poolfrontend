@@ -20,7 +20,12 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userUpdateCredentials", {hmPost, fnUserUpdateCredentials}},
   {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
   // Backend functions
-  {"backendManualPayout", {hmPost, fnBackendManualPayout}}
+  {"backendManualPayout", {hmPost, fnBackendManualPayout}},
+  {"backendQueryClientStats", {hmPost, fnBackendQueryClientStats}},
+  {"backendQueryFoundBlocks", {hmPost, fnBackendQueryFoundBlocks}},
+  {"backendQueryPayouts", {hmPost, fnBackendQueryPayouts}},
+  {"backendQueryPoolBalance", {hmPost, fnBackendQueryPoolBalance}},
+  {"backendQueryPoolStats", {hmPost, fnBackendQueryPoolStats}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
@@ -150,6 +155,11 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
       case fnUserUpdateSettings: onUserUpdateSettings(); break;
       case fnBackendManualPayout: onBackendManualPayout(); break;
+      case fnBackendQueryClientStats: onBackendQueryClientStats(); break;
+      case fnBackendQueryFoundBlocks: onBackendQueryFoundBlocks(); break;
+      case fnBackendQueryPayouts: onBackendQueryPayouts(); break;
+      case fnBackendQueryPoolBalance: onBackendQueryPoolBalance(); break;
+      case fnBackendQueryPoolStats: onBackendQueryPoolStats(); break;
       default:
         reply404();
         return 0;
@@ -505,6 +515,56 @@ void PoolHttpConnection::onUserUpdateSettings()
 }
 
 void PoolHttpConnection::onBackendManualPayout()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendQueryClientStats()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendQueryFoundBlocks()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendQueryPayouts()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendQueryPoolBalance()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  stream.write("{\"error\": \"not implemented\"}\n");
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendQueryPoolStats()
 {
   xmstream stream;
   reply200(stream);

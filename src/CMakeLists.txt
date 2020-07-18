@@ -74,7 +74,6 @@ target_link_libraries(poolfrontend
   loguru
   asyncio-0.5
   asyncioextras-0.5
-  p2p
   p2putils
 )
 

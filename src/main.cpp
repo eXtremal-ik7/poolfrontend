@@ -34,8 +34,10 @@ struct PoolContext {
 
   std::vector<CCoinInfo> CoinList;
   std::vector<std::unique_ptr<CNetworkClientDispatcher>> ClientsDispatcher;
-  std::unordered_map<std::string, size_t> CoinIdxMap;
   std::vector<PoolBackend> Backends;
+  std::unordered_map<std::string, size_t> CoinIdxMap;
+
+  std::vector<std::unique_ptr<CPoolInstance>> Instances;
 
   std::unique_ptr<UserManager> UserMgr;
   std::unique_ptr<PoolHttpServer> HttpServer;
@@ -218,7 +220,7 @@ int main(int argc, char *argv[])
       // backendConfig.poolTAddr;
 
       // Nodes
-      std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher);
+      std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(base, coinInfo));
       for (size_t nodeIdx = 0, nodeIdxE = coinConfig.Nodes.size(); nodeIdx != nodeIdxE; ++nodeIdx) {
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.Nodes[nodeIdx];
@@ -233,15 +235,31 @@ int main(int argc, char *argv[])
       }
 
       // Initialize backend
+      poolContext.Backends.emplace_back(std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher);
       poolContext.ClientsDispatcher.emplace_back(dispatcher.release());
-      poolContext.Backends.emplace_back(std::move(backendConfig), coinInfo, *poolContext.UserMgr);
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
       poolContext.CoinList.push_back(coinInfo);
       poolContext.CoinIdxMap[coinName] = coinIdx;
     }
 
+    poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
+      CInstanceConfig &instanceConfig = config.Instances[instIdx];
+      CPoolInstance *instance = PoolInstanceFabric::get(base, instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
+      if (!instance) {
+        LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
+        return 1;
+      }
 
+      for (const auto &linkedCoinName: instanceConfig.Backends) {
+        auto It = poolContext.CoinIdxMap.find(linkedCoinName);
+        if (It == poolContext.CoinIdxMap.end()) {
+          LOG_F(ERROR, "Instance %s linked with non-existent coin %s", instanceConfig.Name.c_str(), linkedCoinName.c_str());
+          return 1;
+        }
+
+        poolContext.ClientsDispatcher[It->second]->connectWith(instance);
+      }
     }
   }
     

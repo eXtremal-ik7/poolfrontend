@@ -40,7 +40,13 @@ private:
   void onUserGetSettings();
   void onUserUpdateCredentials();
   void onUserUpdateSettings();
+
   void onBackendManualPayout();
+  void onBackendQueryClientStats();
+  void onBackendQueryFoundBlocks();
+  void onBackendQueryPayouts();
+  void onBackendQueryPoolBalance();
+  void onBackendQueryPoolStats();
 
   void replyWithStatus(const char *status);
 
@@ -60,8 +66,15 @@ private:
     fnUserGetSettings,
     fnUserUpdateCredentials,
     fnUserUpdateSettings,
+
     // Backend functions
-    fnBackendManualPayout
+    fnBackendManualPayout,
+    fnBackendQueryClientStats,
+    fnBackendQueryFoundBlocks,
+    fnBackendQueryPayouts,
+    fnBackendQueryPoolBalance,
+    fnBackendQueryPoolStats
+
     // Statistic functions
   };
 

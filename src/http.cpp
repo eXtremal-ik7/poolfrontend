@@ -422,7 +422,9 @@ void PoolHttpConnection::onUserGetSettings()
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write("[");
+  stream.write('{');
+  jsonSerializeString(stream, "status", "ok");
+  stream.write("\"coins\": [");
 
   std::string login;
   if (Server_.userManager().validateSession(sessionId, login)) {
@@ -431,7 +433,6 @@ void PoolHttpConnection::onUserGetSettings()
       if (!firstIteration)
         stream.write(',');
       stream.write('{');
-      jsonSerializeString(stream, "status", "ok");
       jsonSerializeString(stream, "name", coinInfo.Name.c_str());
 
       UserSettingsRecord settings;
@@ -451,7 +452,7 @@ void PoolHttpConnection::onUserGetSettings()
     jsonSerializeString(stream, "status", "unknown_id", true);
   }
 
-  stream.write("]\n");
+  stream.write("]}\n");
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }

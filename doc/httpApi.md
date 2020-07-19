@@ -199,22 +199,23 @@ curl -X POST -d "{\"id\": \"d71f5e21d7273b268178d43a0df53449374b846d8043fbd0038a
 ```
 ### response examples:
 ```
-[
-   {
-      "status":"ok",
-      "name":"BTC",
-      "address":null,
-      "payoutThreshold":null,
-      "autoPayoutEnabled":false
-   },
-   {
-      "status":"ok",
-      "name":"XPM",
-      "address":"ATWDYBwVDvswyZADMbEo5yBt4tH2zfGjd1",
-      "payoutThreshold":"100.00",
-      "autoPayoutEnabled":true
-   }
-]
+{
+   "status":"ok",
+   "coins":[
+      {
+         "name":"BTC",
+         "address":null,
+         "payoutThreshold":null,
+         "autoPayoutEnabled":false
+      },
+      {
+         "name":"XPM",
+         "address":"ATWDYBwVDvswyZADMbEo5yBt4tH2zfGjd1",
+         "payoutThreshold":"100.00",
+         "autoPayoutEnabled":true
+      }
+   ]
+}
 ```
 
 ## userUpdateSettings

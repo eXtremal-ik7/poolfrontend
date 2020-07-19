@@ -32,7 +32,7 @@ struct PoolContext {
 
   std::vector<CCoinInfo> CoinList;
   std::vector<std::unique_ptr<CNetworkClientDispatcher>> ClientsDispatcher;
-  std::vector<PoolBackend> Backends;
+  std::vector<std::unique_ptr<PoolBackend>> Backends;
   std::unordered_map<std::string, size_t> CoinIdxMap;
 
   std::unique_ptr<CPoolThread[]> Workers;
@@ -188,6 +188,16 @@ int main(int argc, char *argv[])
       backendConfig.BalanceCheckInterval = coinConfig.BalanceCheckInterval * 60 * 1000000;
       backendConfig.StatisticCheckInterval = coinConfig.StatisticCheckInterval * 60 * 1000000;
 
+      backendConfig.MiningAddress = coinConfig.MiningAddress;
+      if (!coinInfo.checkAddress(backendConfig.MiningAddress, coinInfo.PayoutAddressType)) {
+        LOG_F(ERROR, "Invalid pool fee address: %s", backendConfig.MiningAddress.c_str());
+        return 1;
+      }
+
+      backendConfig.CoinBaseMsg = coinConfig.CoinbaseMsg;
+      if (backendConfig.CoinBaseMsg.empty())
+        backendConfig.CoinBaseMsg = config.PoolName;
+
       backendConfig.PoolFee.resize(coinConfig.Fees.size());
       for (size_t feeIdx = 0, feeIdxE = coinConfig.Fees.size(); feeIdx != feeIdxE; ++feeIdx) {
         PoolFeeEntry &entry = backendConfig.PoolFee[feeIdx];
@@ -224,7 +234,8 @@ int main(int argc, char *argv[])
       }
 
       // Initialize backend
-      poolContext.Backends.emplace_back(std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher);
+      PoolBackend *backend = new PoolBackend(std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher);
+      poolContext.Backends.emplace_back(backend);
       poolContext.ClientsDispatcher.emplace_back(dispatcher.release());
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
       poolContext.CoinList.push_back(coinInfo);
@@ -263,7 +274,7 @@ int main(int argc, char *argv[])
 
   // Start backends for all coins
   for (auto &backend: poolContext.Backends) {
-    backend.start();
+    backend->start();
   }
 
   // Start clients polling
@@ -298,7 +309,7 @@ int main(int argc, char *argv[])
       poolContext.Workers[i].stop();
     // Stop backends
     for (auto &backend: poolContext.Backends)
-      backend.stop();
+      backend->stop();
     // Stop user manager
     poolContext.UserMgr->stop();
 

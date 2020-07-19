@@ -578,7 +578,7 @@ void PoolHttpConnection::onBackendQueryPoolStats()
 
 PoolHttpServer::PoolHttpServer(uint16_t port,
                                UserManager &userMgr,
-                               std::vector<PoolBackend> &backends,
+                               std::vector<std::unique_ptr<PoolBackend>> &backends,
                                std::unordered_map<std::string, size_t> &coinIdxMap) :
   Port_(port),
   UserMgr_(userMgr),

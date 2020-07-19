@@ -100,7 +100,7 @@ class PoolHttpServer {
 public:
   PoolHttpServer(uint16_t port,
                  UserManager &userMgr,
-                 std::vector<PoolBackend> &backends,
+                 std::vector<std::unique_ptr<PoolBackend>> &backends,
                  std::unordered_map<std::string, size_t> &coinIdxMap);
 
   bool start();
@@ -117,7 +117,7 @@ private:
   asyncBase *Base_;
   uint16_t Port_;
   UserManager &UserMgr_;
-  std::vector<PoolBackend> &Backends_;
+  std::vector<std::unique_ptr<PoolBackend>> &Backends_;
   std::unordered_map<std::string, size_t> &CoinIdxMap_;
 
   std::thread Thread_;

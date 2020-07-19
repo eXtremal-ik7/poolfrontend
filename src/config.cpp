@@ -213,6 +213,8 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
   jsonParseUInt(value, "statisticCheckInterval", &StatisticCheckInterval, error, localPath, errorDescription);
   jsonParseUInt(value, "shareTarget", &ShareTarget, error, localPath, errorDescription);
   jsonParseUInt(value, "stratumWorkLifeTime", &StratumWorkLifeTime, 0, error, localPath, errorDescription);
+  jsonParseString(value, "miningAddress", MiningAddress, error, localPath, errorDescription);
+  jsonParseString(value, "coinbaseMsg", CoinbaseMsg, "", error, localPath, errorDescription);
 }
 
 bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &errorDescription)

@@ -46,7 +46,9 @@
          "balanceCheckInterval":3,
          "statisticCheckInterval":1,
          "shareTarget":2048,
-         "stratumWorkLifeTime":9
+         "stratumWorkLifeTime":9,
+         "miningAddress":"1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u",
+         "coinbaseMsg":"BTC!"
       },
       {
          "name":"XPM",
@@ -73,7 +75,9 @@
          "payoutInterval":10,
          "balanceCheckInterval":3,
          "statisticCheckInterval":1,
-         "shareTarget":7
+         "shareTarget":7,
+         "miningAddress":"AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11",
+         "coinbaseMsg":"XPM!"
       }
    ],
 

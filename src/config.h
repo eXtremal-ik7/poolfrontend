@@ -51,6 +51,8 @@ struct CCoinConfig {
   unsigned StatisticCheckInterval;
   unsigned ShareTarget;
   unsigned StratumWorkLifeTime;
+  std::string MiningAddress;
+  std::string CoinbaseMsg;
 
   void load(const rapidjson::Value &value, std::string &errorDescription, EErrorType *error);
 };

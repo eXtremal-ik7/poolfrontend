@@ -35,7 +35,7 @@ struct PoolContext {
   std::vector<std::unique_ptr<PoolBackend>> Backends;
   std::unordered_map<std::string, size_t> CoinIdxMap;
 
-  std::unique_ptr<CPoolThread[]> Workers;
+  std::unique_ptr<CThreadPool> ThreadPool;
   std::vector<std::unique_ptr<CPoolInstance>> Instances;
 
   std::unique_ptr<UserManager> UserMgr;
@@ -243,15 +243,14 @@ int main(int argc, char *argv[])
     }
 
     // Initialize workers
-    poolContext.Workers.reset(new CPoolThread[workerThreadsNum]);
-    for (unsigned i = 0; i < workerThreadsNum; i++)
-      poolContext.Workers[i].start(i);
+    poolContext.ThreadPool.reset(new CThreadPool(workerThreadsNum));
+    poolContext.ThreadPool->start();
 
     // Initialize instances
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(workerThreadsNum, poolContext.Workers.get(), instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(base, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
@@ -289,7 +288,7 @@ int main(int argc, char *argv[])
   std::thread monitorThread([](asyncBase *base) {
     InitializeWorkerThread();
     loguru::set_thread_name("monitor");
-    LOG_F(INFO, "monitor started tid=%u", GetWorkerThreadId());
+    LOG_F(INFO, "monitor started tid=%u", GetGlobalThreadId());
     asyncLoop(base);
   }, base);
 
@@ -297,7 +296,7 @@ int main(int argc, char *argv[])
   signal(SIGINT, sigIntHandler);
   signal(SIGTERM, sigIntHandler);
 
-  std::thread sigIntThread([&base, &poolContext, workerThreadsNum]() {
+  std::thread sigIntThread([&base, &poolContext]() {
     loguru::set_thread_name("sigint_monitor");
     while (!interrupted)
       std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -305,8 +304,7 @@ int main(int argc, char *argv[])
     // Stop HTTP server
     poolContext.HttpServer->stop();
     // Stop workers
-    for (unsigned i = 0; i < workerThreadsNum; i++)
-      poolContext.Workers[i].stop();
+    poolContext.ThreadPool->stop();
     // Stop backends
     for (auto &backend: poolContext.Backends)
       backend->stop();

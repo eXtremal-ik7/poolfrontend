@@ -612,7 +612,7 @@ bool PoolHttpServer::start()
   Thread_ = std::thread([](PoolHttpServer *server) {
     loguru::set_thread_name("http");
     InitializeWorkerThread();
-    LOG_F(INFO, "http server started tid=%u", GetWorkerThreadId());
+    LOG_F(INFO, "http server started tid=%u", GetGlobalThreadId());
     asyncLoop(server->Base_);
   }, this);
   return true;

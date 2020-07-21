@@ -244,7 +244,6 @@ int main(int argc, char *argv[])
 
     // Initialize workers
     poolContext.ThreadPool.reset(new CThreadPool(workerThreadsNum));
-    poolContext.ThreadPool->start();
 
     // Initialize instances
     poolContext.Instances.resize(config.Instances.size());
@@ -268,6 +267,9 @@ int main(int argc, char *argv[])
     }
   }
     
+  // Start workers
+  poolContext.ThreadPool->start();
+
   // Start user manager
   poolContext.UserMgr->start();
 

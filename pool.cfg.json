@@ -97,6 +97,8 @@
          "protocol":"zmq",
          "port":6666,
          "workerPort":60000,
+         "hostName":"localHost",
+         "minShareLength":7,
          "backends":[
            "XPM"
          ]

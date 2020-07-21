@@ -86,6 +86,40 @@ static inline void jsonParseString(rapidjson::Document &document, const char *na
   }
 }
 
+static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, const std::string &defaultValue, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsString())
+      out = document[name].GetString();
+    else
+      *validAcc = false;
+  } else {
+    out = defaultValue;
+  }
+}
+
+
+static inline void jsonParseInt64(rapidjson::Document &document, const char *name, int64_t *out, int64_t defaultValue, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsInt64())
+      *out = document[name].GetInt64();
+    else
+      *validAcc = false;
+  } else {
+    *out = defaultValue;
+  }
+}
+
+static inline void jsonParseUInt(rapidjson::Document &document, const char *name, unsigned *out, unsigned defaultValue, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsUint())
+      *out = document[name].GetUint();
+    else
+      *validAcc = false;
+  } else {
+    *out = defaultValue;
+  }
+}
+
 static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsBool())
@@ -100,10 +134,10 @@ static inline bool parseUserCredentials(const char *json, UserManager::Credentia
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(json);
-  jsonParseString(document, "login", credentials.Login, &validAcc);
-  jsonParseString(document, "password", credentials.Password, &validAcc);
-  jsonParseString(document, "name", credentials.Name, &validAcc);
-  jsonParseString(document, "email", credentials.EMail, &validAcc);
+  jsonParseString(document, "login", credentials.Login, "", &validAcc);
+  jsonParseString(document, "password", credentials.Password, "", &validAcc);
+  jsonParseString(document, "name", credentials.Name, "", &validAcc);
+  jsonParseString(document, "email", credentials.EMail, "", &validAcc);
   return validAcc;
 }
 
@@ -489,7 +523,7 @@ void PoolHttpConnection::onUserUpdateSettings()
 
   auto It = Server_.userManager().coinIdxMap().find(settings.Coin);
   if (It == Server_.userManager().coinIdxMap().end()) {
-    replyWithStatus("request_format_error");
+    replyWithStatus("invalid_coin");
     return;
   }
 
@@ -538,12 +572,53 @@ void PoolHttpConnection::onBackendQueryClientStats()
 
 void PoolHttpConnection::onBackendQueryFoundBlocks()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  bool validAcc = true;
+  std::string coin;
+  int64_t heightFrom;
+  std::string hashFrom;
+  uint32_t count;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  jsonParseString(document, "coin", coin, &validAcc);
+  jsonParseInt64(document, "heightFrom", &heightFrom, -1, &validAcc);
+  jsonParseString(document, "hashFrom", hashFrom, "", &validAcc);
+  jsonParseUInt(document, "count", &count, 20, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  PoolBackend *backend = Server_.backend(coin);
+  if (!backend) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  const CCoinInfo &coinInfo = backend->getCoinInfo();
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  backend->queryFoundBlocks(heightFrom, hashFrom, count, [this, &coinInfo](const std::vector<FoundBlockRecord> &blocks, const std::vector<int64_t> &confirmations) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+    stream.write('{');
+    jsonSerializeString(stream, "status", "ok");
+    stream.write("\"blocks\": [");
+    for (size_t i = 0, ie = blocks.size(); i != ie; ++i) {
+      stream.write('{');
+      jsonSerializeInt(stream, "height", blocks[i].Height);
+      jsonSerializeString(stream, "hash", blocks[i].Hash.c_str());
+      jsonSerializeInt(stream, "time", blocks[i].Time);
+      jsonSerializeInt(stream, "confirmations", confirmations[i]);
+      jsonSerializeString(stream, "generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.RationalPartSize).c_str());
+      jsonSerializeString(stream, "foundBy", blocks[i].FoundBy.c_str(), true);
+      stream.write('}');
+    }
+    stream.write("]}");
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onBackendQueryPayouts()

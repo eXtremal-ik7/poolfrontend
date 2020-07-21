@@ -201,10 +201,13 @@ int main(int argc, char *argv[])
       backendConfig.PoolFee.resize(coinConfig.Fees.size());
       for (size_t feeIdx = 0, feeIdxE = coinConfig.Fees.size(); feeIdx != feeIdxE; ++feeIdx) {
         PoolFeeEntry &entry = backendConfig.PoolFee[feeIdx];
-        entry.Address = coinConfig.Fees[feeIdx].Address;
+        entry.User = coinConfig.Fees[feeIdx].Address;
         entry.Percentage = coinConfig.Fees[feeIdx].Percentage;
-        if (!coinInfo.checkAddress(entry.Address, coinInfo.PayoutAddressType)) {
-          LOG_F(ERROR, "Invalid pool fee address: %s", entry.Address.c_str());
+
+        UserManager::Credentials credentials;
+        if (!poolContext.UserMgr->getUserCredentials(entry.User, credentials)) {
+          LOG_F(ERROR, "User %s not found", entry.User.c_str());
+          LOG_F(ERROR, "You need create user before adding to pool fee receivers");
           return 1;
         }
 
@@ -249,7 +252,7 @@ int main(int argc, char *argv[])
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(base, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(base, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;

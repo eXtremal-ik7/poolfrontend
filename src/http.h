@@ -107,6 +107,10 @@ public:
   void stop();
 
   UserManager &userManager() { return UserMgr_; }
+  PoolBackend *backend(const std::string &coin) {
+    auto It = CoinIdxMap_.find(coin);
+    return It != CoinIdxMap_.end() ? Backends_[It->second].get() : nullptr;
+  }
 
 private:
   static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);

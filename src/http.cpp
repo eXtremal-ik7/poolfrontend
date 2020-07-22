@@ -579,6 +579,11 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
   uint32_t count;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   jsonParseString(document, "coin", coin, &validAcc);
   jsonParseInt64(document, "heightFrom", &heightFrom, -1, &validAcc);
   jsonParseString(document, "hashFrom", hashFrom, "", &validAcc);
@@ -597,7 +602,7 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
   const CCoinInfo &coinInfo = backend->getCoinInfo();
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->queryFoundBlocks(heightFrom, hashFrom, count, [this, &coinInfo](const std::vector<FoundBlockRecord> &blocks, const std::vector<int64_t> &confirmations) {
+  backend->queryFoundBlocks(heightFrom, hashFrom, count, [this, &coinInfo](const std::vector<FoundBlockRecord> &blocks, const std::vector<CNetworkClient::GetBlockConfirmationsQuery> &confirmations) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -609,7 +614,7 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
       jsonSerializeInt(stream, "height", blocks[i].Height);
       jsonSerializeString(stream, "hash", blocks[i].Hash.c_str());
       jsonSerializeInt(stream, "time", blocks[i].Time);
-      jsonSerializeInt(stream, "confirmations", confirmations[i]);
+      jsonSerializeInt(stream, "confirmations", confirmations[i].Confirmations);
       jsonSerializeString(stream, "generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.RationalPartSize).c_str());
       jsonSerializeString(stream, "foundBy", blocks[i].FoundBy.c_str(), true);
       stream.write('}');

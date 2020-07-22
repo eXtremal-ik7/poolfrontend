@@ -49,7 +49,10 @@ endif(MSVC)
 
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectPoolcore.cmake)
 
+find_package(OpenSSL REQUIRED)
 find_package(RapidJSON CONFIG REQUIRED)
+find_package(RocksDB CONFIG REQUIRED)
+find_package(Protobuf CONFIG REQUIRED)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
@@ -71,10 +74,18 @@ add_executable(poolfrontend
 
 target_link_libraries(poolfrontend
   poolcore
+  poolinstances
+  blockmaker
+  poolcommon
   loguru
   asyncio-0.5
   asyncioextras-0.5
   p2putils
+  RapidJSON::rapidjson
+  OpenSSL::SSL
+  OpenSSL::Crypto
+  RocksDB::rocksdb
+  protobuf::libprotobuf
 )
 
 # OS-specific configuration

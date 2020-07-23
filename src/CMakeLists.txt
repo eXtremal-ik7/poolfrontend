@@ -66,13 +66,7 @@ include_directories(
   ${libp2p_BINARY_DIR}/include
 )
 
-add_executable(poolfrontend 
-  config.cpp
-  main.cpp
-  http.cpp
-)
-
-target_link_libraries(poolfrontend
+set(LIBRARIES
   poolcore
   poolinstances
   blockmaker
@@ -90,16 +84,32 @@ target_link_libraries(poolfrontend
 
 # OS-specific configuration
 if (WIN32)
-  target_link_libraries(poolfrontend ws2_32 mswsock)
+  set(LIBRARIES ${LIBRARIES} ws2_32 mswsock)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  target_link_libraries(poolfrontend dl)
+  set(LIBRARIES ${LIBRARIES} dl)
 endif()
 
 # Compiler-specific configuration
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_link_libraries(poolfrontend
+  set(LIBRARIES ${LIBRARIES}
     atomic
     pthread
     stdc++fs
   )
 endif()
+
+# Pool frontend main executable
+add_executable(poolfrontend 
+  config.cpp
+  main.cpp
+  http.cpp
+)
+
+target_link_libraries(poolfrontend ${LIBRARIES})
+
+# Node rpc (test node rpc)
+add_executable(noderpc
+  noderpc.cpp
+)
+
+target_link_libraries(noderpc ${LIBRARIES})

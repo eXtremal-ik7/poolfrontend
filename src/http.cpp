@@ -22,7 +22,8 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
-  {"backendQueryClientStats", {hmPost, fnBackendQueryClientStats}},
+  {"backendQueryUserBalance", {hmPost, fnBackendQueryUserBalance}},
+  {"backendQueryUserStats", {hmPost, fnBackendQueryUserStats}},
   {"backendQueryFoundBlocks", {hmPost, fnBackendQueryFoundBlocks}},
   {"backendQueryPayouts", {hmPost, fnBackendQueryPayouts}},
   {"backendQueryPoolBalance", {hmPost, fnBackendQueryPoolBalance}},
@@ -190,7 +191,8 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
       case fnUserUpdateSettings: onUserUpdateSettings(); break;
       case fnBackendManualPayout: onBackendManualPayout(); break;
-      case fnBackendQueryClientStats: onBackendQueryClientStats(); break;
+      case fnBackendQueryUserBalance: onBackendQueryUserBalance(); break;
+      case fnBackendQueryUserStats: onBackendQueryUserStats(); break;
       case fnBackendQueryFoundBlocks: onBackendQueryFoundBlocks(); break;
       case fnBackendQueryPayouts: onBackendQueryPayouts(); break;
       case fnBackendQueryPoolBalance: onBackendQueryPoolBalance(); break;
@@ -560,7 +562,103 @@ void PoolHttpConnection::onBackendManualPayout()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onBackendQueryClientStats()
+void PoolHttpConnection::onBackendQueryUserBalance()
+{
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+
+  std::string sessionId;
+  std::string coin;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "coin", coin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  // id -> login
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, login)) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  if (!coin.empty()) {
+    PoolBackend *backend = Server_.backend(coin);
+    if (!backend) {
+      replyWithStatus("invalid_coin");
+      return;
+    }
+
+    objectIncrementReference(aioObjectHandle(Socket_), 1);
+    backend->queryUserBalance(login, [this, backend](const UserBalanceRecord &record) {
+      xmstream stream;
+      reply200(stream);
+      size_t offset = startChunk(stream);
+      stream.write('{');
+      jsonSerializeString(stream, "status", "ok");
+      stream.write("\"balances\": [{");
+
+      const CCoinInfo &coinInfo = backend->getCoinInfo();
+      jsonSerializeString(stream, "coin", coinInfo.Name.c_str());
+      jsonSerializeString(stream, "balance", FormatMoney(record.Balance, coinInfo.RationalPartSize).c_str());
+      jsonSerializeString(stream, "requested", FormatMoney(record.Requested, coinInfo.RationalPartSize).c_str());
+      jsonSerializeString(stream, "paid", FormatMoney(record.Paid, coinInfo.RationalPartSize).c_str(), true);
+      stream.write('}');
+      stream.write("]}");
+
+      finishChunk(stream, offset);
+      aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+      objectDecrementReference(aioObjectHandle(Socket_), 1);
+    });
+  } else {
+    // Ask all backends about balances
+    size_t backendsNum = Server_.backendsNum();
+    // We need heap allocation
+    UserBalanceRecord *balanceData = new UserBalanceRecord[backendsNum];
+    std::atomic<size_t> *visitedBackends = new std::atomic<size_t>(0);
+    objectIncrementReference(aioObjectHandle(Socket_), backendsNum);
+    for (size_t backendIdx = 0; backendIdx != backendsNum; ++backendIdx) {
+      PoolBackend *backend = Server_.backend(backendIdx);
+      backend->queryUserBalance(login, [this, backendIdx, backendsNum, balanceData, visitedBackends](const UserBalanceRecord &record) {
+        // This code executes concurrently
+        balanceData[backendIdx] = record;
+        if (++*visitedBackends == backendsNum) {
+          // Execution finished
+          xmstream stream;
+          reply200(stream);
+          size_t offset = startChunk(stream);
+          stream.write('{');
+          jsonSerializeString(stream, "status", "ok");
+          stream.write("\"balances\": [");
+          for (size_t i = 0; i < backendsNum; i++) {
+            if (i != 0)
+              stream.write(',');
+            stream.write('{');
+            const CCoinInfo &coinInfo = Server_.backend(i)->getCoinInfo();
+            jsonSerializeString(stream, "coin", coinInfo.Name.c_str());
+            jsonSerializeString(stream, "balance", FormatMoney(balanceData[i].Balance, coinInfo.RationalPartSize).c_str());
+            jsonSerializeString(stream, "requested", FormatMoney(balanceData[i].Requested, coinInfo.RationalPartSize).c_str());
+            jsonSerializeString(stream, "paid", FormatMoney(balanceData[i].Paid, coinInfo.RationalPartSize).c_str(), true);
+            stream.write('}');
+          }
+
+          stream.write("]}");
+          delete visitedBackends;
+          delete[] balanceData;
+
+          finishChunk(stream, offset);
+          aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+        }
+
+        objectDecrementReference(aioObjectHandle(Socket_), 1);
+      });
+    }
+  }
+}
+
+void PoolHttpConnection::onBackendQueryUserStats()
 {
   xmstream stream;
   reply200(stream);
@@ -610,6 +708,8 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
     jsonSerializeString(stream, "status", "ok");
     stream.write("\"blocks\": [");
     for (size_t i = 0, ie = blocks.size(); i != ie; ++i) {
+      if (i != 0)
+        stream.write(',');
       stream.write('{');
       jsonSerializeInt(stream, "height", blocks[i].Height);
       jsonSerializeString(stream, "hash", blocks[i].Hash.c_str());

@@ -42,7 +42,8 @@ private:
   void onUserUpdateSettings();
 
   void onBackendManualPayout();
-  void onBackendQueryClientStats();
+  void onBackendQueryUserBalance();
+  void onBackendQueryUserStats();
   void onBackendQueryFoundBlocks();
   void onBackendQueryPayouts();
   void onBackendQueryPoolBalance();
@@ -69,7 +70,8 @@ private:
 
     // Backend functions
     fnBackendManualPayout,
-    fnBackendQueryClientStats,
+    fnBackendQueryUserBalance,
+    fnBackendQueryUserStats,
     fnBackendQueryFoundBlocks,
     fnBackendQueryPayouts,
     fnBackendQueryPoolBalance,
@@ -107,10 +109,12 @@ public:
   void stop();
 
   UserManager &userManager() { return UserMgr_; }
+  PoolBackend *backend(size_t i) { return Backends_[i].get(); }
   PoolBackend *backend(const std::string &coin) {
     auto It = CoinIdxMap_.find(coin);
     return It != CoinIdxMap_.end() ? Backends_[It->second].get() : nullptr;
   }
+  size_t backendsNum() { return Backends_.size(); }
 
 private:
   static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);

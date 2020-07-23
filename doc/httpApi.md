@@ -241,3 +241,116 @@ curl -X POST -d "{\"id\": \"147a30085b6f45a693e1dd2ec2c69642eb15df4fd53256111522
 ```
 {"status": "ok"}
 ```
+
+## backendQueryUserBalance
+Function returns user balance, requested and paid values for one or all available coins
+
+### query type: POST
+### arguments:
+* id:string - unique user session id returned by userlogin function
+* coin:string
+
+### return values:
+* status:string - can be one of common status values or:
+  * unknown_id: invalid session id
+* balances: array of balance objects with fields 'coin', 'balance', 'requested' and 'paid'
+
+### curl example:
+```
+curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0921b1c9038d17b34e8537f078919b995eab3aae5dab43a944359e40fcffd1171dfceed019"}' http://localhost:18880/api/backendQueryClientBalance
+curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0921b1c9038d17b34e8537f078919b995eab3aae5dab43a944359e40fcffd1171dfceed019", "coin": "XPM.testnet"}' http://localhost:18880/api/backendQueryClientBalance
+```
+
+### response examples:
+```
+{
+   "status":"ok",
+   "balances":[
+      {
+         "coin":"XPM.testnet",
+         "balance":"29.31",
+         "requested":"0.00",
+         "paid":"3286.21"
+      }
+   ]
+}
+```
+```
+{
+   "status":"ok",
+   "balances":[
+      {
+         "coin":"BTC",
+         "balance":"0.00",
+         "requested":"0.00",
+         "paid":"0.00"
+      },
+      {
+         "coin":"XPM.testnet",
+         "balance":"29.31",
+         "requested":"0.00",
+         "paid":"3286.21"
+      }
+   ]
+}
+```
+
+## backendQueryFoundBlocks:
+Function returns blocks found by pool, authorization not required.
+
+### query type: POST
+### arguments:
+* coin:string
+* heightFrom:integer (default: -1) - search blocks from this height
+* hashFrom:string (default: "") - search blocks from this hash. You need use this 2 arguments for implement page by page loading. With default (or omitted) values search starts from last found block.
+* count:integer (default: 20) - requested blocks count
+With default arguments function returns last 20 blocks found by pool
+
+### return values:
+* status:string - can be one of common status values:
+* blocks: array of block objects with fields:
+  * height:integer
+  * hash:string
+  * time:integer (unix time format)
+  * confirmations:integer - block confirmations number. -1: means orphan; -2: no data
+  * generatedCoins:string - usually first coinbase output value
+  * foundBy:string - name (or login) of block founder
+
+### curl example:
+```
+curl -X POST -d '{"coin": "XPM.testnet", "count": 3}' http://localhost:18880/api/backendQueryFoundBlocks
+```
+
+
+### response examples:
+```
+{
+   "status":"ok",
+   "blocks":[
+      {
+         "height":2466264,
+         "hash":"e1d91b43b41ecad70f057b1d7953f8f53ad6c8b9afd7ff78a4bb9f7a8f39526d",
+         "time":1595533509,
+         "confirmations":107,
+         "generatedCoins":"29.32",
+         "foundBy":"user"
+      },
+      {
+         "height":2466263,
+         "hash":"478546502f05c2622bb597b8d7faee6fe74527738d987a5e225a38f258ceb619",
+         "time":1595533507,
+         "confirmations":108,
+         "generatedCoins":"29.32",
+         "foundBy":"user"
+      },
+      {
+         "height":2466262,
+         "hash":"c38c1918a136003cc9cd75599acb31bd3dec7b89142792401953a16de879c2e5",
+         "time":1595533504,
+         "confirmations":109,
+         "generatedCoins":"29.32",
+         "foundBy":"user"
+      }
+   ]
+}
+```

@@ -242,6 +242,27 @@ curl -X POST -d "{\"id\": \"147a30085b6f45a693e1dd2ec2c69642eb15df4fd53256111522
 {"status": "ok"}
 ```
 
+## backendManualPayout
+Force payout all funds from user balance
+
+### query type: POST
+### arguments:
+* id:string - unique user session id returned by userlogin function
+* coin:string
+
+### return values:
+* status:string - can be one of common status values
+* result:boolean - true if payout scheduled or false if balance is less than minimal allowed payout value
+
+### curl example:
+```
+curl -X POST -d '{"id": "ae860bab2faca258c790563a5f97640e55c3c8f23df3fbfde07ed46e201beebbcd04f5b536c5aaf07969c55b09c569c46f37bcfb896c6931be2f9cc4bc6372f8", "coin": "XPM.testnet"}' http://localhost:18880/api/backendManualPayout
+```
+### response examples:
+```
+{"status": "ok","result": true}
+```
+
 ## backendQueryUserBalance
 Function returns user balance, requested and paid values for one or all available coins
 
@@ -257,8 +278,8 @@ Function returns user balance, requested and paid values for one or all availabl
 
 ### curl example:
 ```
-curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0921b1c9038d17b34e8537f078919b995eab3aae5dab43a944359e40fcffd1171dfceed019"}' http://localhost:18880/api/backendQueryClientBalance
-curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0921b1c9038d17b34e8537f078919b995eab3aae5dab43a944359e40fcffd1171dfceed019", "coin": "XPM.testnet"}' http://localhost:18880/api/backendQueryClientBalance
+curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0921b1c9038d17b34e8537f078919b995eab3aae5dab43a944359e40fcffd1171dfceed019"}' http://localhost:18880/api/backendQueryUserBalance
+curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0921b1c9038d17b34e8537f078919b995eab3aae5dab43a944359e40fcffd1171dfceed019", "coin": "XPM.testnet"}' http://localhost:18880/api/backendQueryUserBalance
 ```
 
 ### response examples:
@@ -350,6 +371,187 @@ curl -X POST -d '{"coin": "XPM.testnet", "count": 3}' http://localhost:18880/api
          "confirmations":109,
          "generatedCoins":"29.32",
          "foundBy":"user"
+      }
+   ]
+}
+```
+
+## backendQueryPayouts
+Returns sent payouts for user (time and transaction id for each)
+
+### query type: POST
+### arguments:
+* id:string - unique user session id returned by userlogin function
+* coin:string
+* timeFrom:integer (unix time, default: 0) - search payouts from this time point. You need use this argument for implement page by page loading
+* count:integer (default: 20) - requested payouts count
+
+### return values:
+* status:string - can be one of common status values:
+* payouts: array of payouts objects with fields:
+  * time
+  * txid
+  * value
+
+### curl example:
+```
+curl -X POST -d '{"id": "8fa732ed14193de6c50b419dcfa1480a3ff6b96208e68a9c1496974a31cc51c035cd3e3708cfca1e50d6a80f2ff77cc4005fea23fa442d6b2dedefdad21d8857", "coin": "XPM.testnet", "count": 3}'
+```
+
+### response examples:
+```
+{
+   "status":"ok",
+   "payouts":[
+      {
+         "time":1595534238,
+         "txid":"7b026ff4c4088fa94770f3351a07c2af3f593c7f6ffd48bc66da803372f15540",
+         "value":"117.29"
+      },
+      {
+         "time":1595533997,
+         "txid":"0b331e1f7fde583fd643103e4777ae2f307aca4ec7bde412f0ab05e84ba43a80",
+         "value":"117.31"
+      },
+      {
+         "time":1595533637,
+         "txid":"e4a2ec354f3abcf0b08f5e78b10dc08b525e22d5399db627606f0c36c7881fa6",
+         "value":"117.31"
+      }
+   ]
+}
+```
+
+## backendQueryPoolStats
+Returns pool statistic for each coin
+
+### query type: POST
+### arguments:
+* coin:string (default="")
+
+### return values:
+* status:string - can be one of common status values:
+* stats: array of stat objects with fields:
+  * coin:string
+  * clients:integer - number of client
+  * workers:integer - number of workers
+  * cpus:integer - not 0 if client send this information
+  * gpus:integer - not 0 if client send this information
+  * asics:integer - not 0 if client send this information
+  * other:integer - not 0 if client send this information
+  * averageLatency:integer
+  * power:integer - usually hashrate, depends on coin type
+
+### curl example:
+```
+curl -X POST -d '{"coin": "XPM.testnet"}' http://localhost:18880/api/backendQueryPoolStats
+```
+```
+curl -X POST -d '{}' http://localhost:18880/api/backendQueryPoolStats
+```
+
+### response examples:
+```
+{
+   "status":"ok",
+   "balances":[
+      {
+         "coin":"XPM.testnet",
+         "clients":0,
+         "workers":0,
+         "cpus":0,
+         "gpus":0,
+         "asics":0,
+         "other":0,
+         "averageLatency":0,
+         "power":0
+      }
+   ]
+}
+```
+```
+{
+   "status":"ok",
+   "stats":[
+      {
+         "coin":"BTC",
+         "clients":0,
+         "workers":0,
+         "cpus":0,
+         "gpus":0,
+         "asics":0,
+         "other":0,
+         "averageLatency":0,
+         "power":0
+      },
+      {
+         "coin":"XPM.testnet",
+         "clients":1,
+         "workers":1,
+         "cpus":0,
+         "gpus":1,
+         "asics":0,
+         "other":0,
+         "averageLatency":0,
+         "power":416
+      }
+   ]
+}
+```
+
+## backendQueryUserStats
+Returns user statistic (aggregate and for each worker)
+
+### query type: POST
+### arguments:
+* id:string - unique user session id returned by userlogin function
+* coin:string
+
+### return values:
+* status:string - can be one of common status values
+* total: object with these fields:
+  * workers:integer: number of connections for current user
+  * cpus - not 0 if client send this information
+  * gpus - not 0 if client send this information
+  * asics - not 0 if client send this information
+  * other - not 0 if client send this information
+  * averageLatency:integer
+  * power:integer - aggregate hashrate for current user, (value depends on coin type)
+* workers: array of objects with these fields:
+  * name:string - worker name
+  * power:integer - worker hashrate
+  * latency:integer - worker latency (ms)
+  * type:string - units type (CPU, GPU, ASIC)
+  * units:integer - amount of units, not 0 if client send this information
+  * temp:integer - average temperature of all units (usually GPUs)
+
+### curl example:
+```
+curl -X POST -d '{"id": "ae860bab2faca258c790563a5f97640e55c3c8f23df3fbfde07ed46e201beebbcd04f5b536c5aaf07969c55b09c569c46f37bcfb896c6931be2f9cc4bc6372f8", "coin": "XPM.testnet"}' http://localhost:18880/api/backendQueryUserStats
+```
+
+### response examples:
+```
+{
+   "status":"ok",
+   "total":{
+      "clients":0,
+      "workers":1,
+      "cpus":0,
+      "gpus":1,
+      "asics":0,
+      "other":0,
+      "averageLatency":0,
+      "power":427
+   },
+   "workers":[
+      {
+         "name":"userpc",
+         "power":427,
+         "latency":0,
+         "type":"GPU",
+         "units":1,
+         "temp":0
       }
    ]
 }

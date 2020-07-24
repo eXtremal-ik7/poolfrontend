@@ -6,6 +6,17 @@
 #include "loguru.hpp"
 #include "rapidjson/document.h"
 
+static const char *unitType(EUnitType type)
+{
+  static const char *types[] = {
+    "CPU",
+    "GPU",
+    "ASIC",
+    "OTHER"
+  };
+
+  return types[std::min(type, EOTHER)];
+}
 
 std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> PoolHttpConnection::FunctionNameMap_ = {
   // User manager functions
@@ -22,12 +33,12 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
-  {"backendQueryUserBalance", {hmPost, fnBackendQueryUserBalance}},
-  {"backendQueryUserStats", {hmPost, fnBackendQueryUserStats}},
   {"backendQueryFoundBlocks", {hmPost, fnBackendQueryFoundBlocks}},
   {"backendQueryPayouts", {hmPost, fnBackendQueryPayouts}},
   {"backendQueryPoolBalance", {hmPost, fnBackendQueryPoolBalance}},
-  {"backendQueryPoolStats", {hmPost, fnBackendQueryPoolStats}}
+  {"backendQueryPoolStats", {hmPost, fnBackendQueryPoolStats}},
+  {"backendQueryUserBalance", {hmPost, fnBackendQueryUserBalance}},
+  {"backendQueryUserStats", {hmPost, fnBackendQueryUserStats}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
@@ -110,6 +121,18 @@ static inline void jsonParseInt64(rapidjson::Document &document, const char *nam
   }
 }
 
+
+static inline void jsonParseUInt64(rapidjson::Document &document, const char *name, uint64_t *out, int64_t defaultValue, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsUint64())
+      *out = document[name].GetUint64();
+    else
+      *validAcc = false;
+  } else {
+    *out = defaultValue;
+  }
+}
+
 static inline void jsonParseUInt(rapidjson::Document &document, const char *name, unsigned *out, unsigned defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsUint())
@@ -135,6 +158,8 @@ static inline bool parseUserCredentials(const char *json, UserManager::Credentia
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(json);
+  if (document.HasParseError())
+    return false;
   jsonParseString(document, "login", credentials.Login, "", &validAcc);
   jsonParseString(document, "password", credentials.Password, "", &validAcc);
   jsonParseString(document, "name", credentials.Name, "", &validAcc);
@@ -299,6 +324,11 @@ void PoolHttpConnection::onUserAction()
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   jsonParseString(document, "id", actionId, &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -373,6 +403,11 @@ void PoolHttpConnection::onUserLogout()
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   jsonParseString(document, "id", sessionId, &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -412,6 +447,11 @@ void PoolHttpConnection::onUserGetCredentials()
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   jsonParseString(document, "id", sessionId, &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -449,6 +489,11 @@ void PoolHttpConnection::onUserGetSettings()
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
   jsonParseString(document, "id", sessionId, &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -511,6 +556,10 @@ void PoolHttpConnection::onUserUpdateSettings()
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
 
   std::string payoutThreshold;
   jsonParseString(document, "id", sessionId, &validAcc);
@@ -554,12 +603,51 @@ void PoolHttpConnection::onUserUpdateSettings()
 
 void PoolHttpConnection::onBackendManualPayout()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string sessionId;
+  std::string coin;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "coin", coin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  // id -> login
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, login)) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  PoolBackend *backend = Server_.backend(coin);
+  if (!backend) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  backend->manualPayout(login, [this](bool result) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    stream.write('{');
+    jsonSerializeString(stream, "status", "ok");
+    jsonSerializeBoolean(stream, "result", result, true);
+    stream.write('}');
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onBackendQueryUserBalance()
@@ -567,6 +655,10 @@ void PoolHttpConnection::onBackendQueryUserBalance()
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
 
   std::string sessionId;
   std::string coin;
@@ -660,12 +752,79 @@ void PoolHttpConnection::onBackendQueryUserBalance()
 
 void PoolHttpConnection::onBackendQueryUserStats()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string sessionId;
+  std::string coin;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "coin", coin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  // id -> login
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, login)) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  PoolBackend *backend = Server_.backend(coin);
+  if (!backend) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  backend->queryUserStats(login, [this](const SiteStatsRecord &aggregate, const std::vector<ClientStatsRecord> &workers) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    stream.write('{');
+    jsonSerializeString(stream, "status", "ok");
+
+    // Aggregate
+    stream.write("\"total\": {");
+    jsonSerializeInt(stream, "clients", aggregate.Clients);
+    jsonSerializeInt(stream, "workers", aggregate.Workers);
+    jsonSerializeInt(stream, "cpus", aggregate.CPUNum);
+    jsonSerializeInt(stream, "gpus", aggregate.GPUNum);
+    jsonSerializeInt(stream, "asics", aggregate.ASICNum);
+    jsonSerializeInt(stream, "other", aggregate.OtherNum);
+    jsonSerializeInt(stream, "averageLatency", aggregate.Latency);
+    jsonSerializeInt(stream, "power", aggregate.Power, true);
+    stream.write('}');
+
+    // Workers
+    stream.write(",\"workers\": [");
+    for (size_t i = 0, ie = workers.size(); i != ie; ++i) {
+      if (i != 0)
+        stream.write(',');
+      stream.write('{');
+      jsonSerializeString(stream, "name", workers[i].WorkerId.c_str());
+      jsonSerializeInt(stream, "power", workers[i].Power);
+      jsonSerializeInt(stream, "latency", workers[i].Latency);
+      jsonSerializeString(stream, "type", unitType(static_cast<EUnitType>(workers[i].UnitType)));
+      jsonSerializeInt(stream, "units", workers[i].Units);
+      jsonSerializeInt(stream, "temp", workers[i].Temp, true);
+      stream.write('}');
+    }
+
+    stream.write(']');
+    stream.write('}');
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onBackendQueryFoundBlocks()
@@ -728,10 +887,58 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
 
 void PoolHttpConnection::onBackendQueryPayouts()
 {
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string sessionId;
+  std::string coin;
+  uint64_t timeFrom;
+  unsigned count;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "coin", coin, "", &validAcc);
+  jsonParseUInt64(document, "timeFrom", &timeFrom, 0, &validAcc);
+  jsonParseUInt(document, "count", &count, 20, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  // id -> login
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, login)) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  PoolBackend *backend = Server_.backend(coin);
+  if (!backend) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  std::vector<PayoutDbRecord> records;
+  backend->queryPayouts(login, timeFrom, count, records);
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
+  stream.write('{');
+  jsonSerializeString(stream, "status", "ok");
+  stream.write("\"payouts\": [");
+  for (size_t i = 0, ie = records.size(); i != ie; ++i) {
+    if (i != 0)
+      stream.write(',');
+    stream.write('{');
+    jsonSerializeInt(stream, "time", records[i].time);
+    jsonSerializeString(stream, "txid", records[i].transactionId.c_str());
+    jsonSerializeString(stream, "value", FormatMoney(records[i].value, backend->getCoinInfo().RationalPartSize).c_str(), true);
+    stream.write('}');
+  }
+  stream.write("]}");
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
@@ -748,12 +955,103 @@ void PoolHttpConnection::onBackendQueryPoolBalance()
 
 void PoolHttpConnection::onBackendQueryPoolStats()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string coin;
+  jsonParseString(document, "coin", coin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  if (!coin.empty()) {
+    PoolBackend *backend = Server_.backend(coin);
+    if (!backend) {
+      replyWithStatus("invalid_coin");
+      return;
+    }
+
+    objectIncrementReference(aioObjectHandle(Socket_), 1);
+    backend->queryPoolStats([this, backend](const SiteStatsRecord &record) {
+      xmstream stream;
+      reply200(stream);
+      size_t offset = startChunk(stream);
+      stream.write('{');
+      jsonSerializeString(stream, "status", "ok");
+      stream.write("\"balances\": [{");
+
+      const CCoinInfo &coinInfo = backend->getCoinInfo();
+      jsonSerializeString(stream, "coin", coinInfo.Name.c_str());
+      jsonSerializeInt(stream, "clients", record.Clients);
+      jsonSerializeInt(stream, "workers", record.Workers);
+      jsonSerializeInt(stream, "cpus", record.CPUNum);
+      jsonSerializeInt(stream, "gpus", record.GPUNum);
+      jsonSerializeInt(stream, "asics", record.ASICNum);
+      jsonSerializeInt(stream, "other", record.OtherNum);
+      jsonSerializeInt(stream, "averageLatency", record.Latency);
+      jsonSerializeInt(stream, "power", record.Power, true);
+      stream.write('}');
+      stream.write("]}");
+
+      finishChunk(stream, offset);
+      aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+      objectDecrementReference(aioObjectHandle(Socket_), 1);
+    });
+  } else {
+    // Ask all backends about balances
+    size_t backendsNum = Server_.backendsNum();
+    // We need heap allocation
+    SiteStatsRecord *poolStatsData = new SiteStatsRecord[backendsNum];
+    std::atomic<size_t> *visitedBackends = new std::atomic<size_t>(0);
+    objectIncrementReference(aioObjectHandle(Socket_), backendsNum);
+    for (size_t backendIdx = 0; backendIdx != backendsNum; ++backendIdx) {
+      PoolBackend *backend = Server_.backend(backendIdx);
+      backend->queryPoolStats([this, backendIdx, backendsNum, poolStatsData, visitedBackends](const SiteStatsRecord &record) {
+        // This code executes concurrently
+        poolStatsData[backendIdx] = record;
+        if (++*visitedBackends == backendsNum) {
+          // Execution finished
+          xmstream stream;
+          reply200(stream);
+          size_t offset = startChunk(stream);
+          stream.write('{');
+          jsonSerializeString(stream, "status", "ok");
+          stream.write("\"stats\": [");
+          for (size_t i = 0; i < backendsNum; i++) {
+            if (i != 0)
+              stream.write(',');
+            stream.write('{');
+            const CCoinInfo &coinInfo = Server_.backend(i)->getCoinInfo();
+            jsonSerializeString(stream, "coin", coinInfo.Name.c_str());
+            jsonSerializeInt(stream, "clients", poolStatsData[i].Clients);
+            jsonSerializeInt(stream, "workers", poolStatsData[i].Workers);
+            jsonSerializeInt(stream, "cpus", poolStatsData[i].CPUNum);
+            jsonSerializeInt(stream, "gpus", poolStatsData[i].GPUNum);
+            jsonSerializeInt(stream, "asics", poolStatsData[i].ASICNum);
+            jsonSerializeInt(stream, "other", poolStatsData[i].OtherNum);
+            jsonSerializeInt(stream, "averageLatency", poolStatsData[i].Latency);
+            jsonSerializeInt(stream, "power", poolStatsData[i].Power, true);
+            stream.write('}');
+          }
+
+          stream.write("]}");
+          delete visitedBackends;
+          delete[] poolStatsData;
+
+          finishChunk(stream, offset);
+          aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+        }
+
+        objectDecrementReference(aioObjectHandle(Socket_), 1);
+      });
+    }
+  }
 }
 
 PoolHttpServer::PoolHttpServer(uint16_t port,

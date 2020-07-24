@@ -27,14 +27,14 @@
             }
          ],
          "fees":[
-            {
-               "address":"1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u",
-               "percentage":1.0
-            },
-            {
-               "address":"3JQtCjDHwHoKx49bHYHrGmyiaWpjAdARev",
-               "percentage":1.0
-            }
+           /*{
+             "address":"user1",
+             "percentage":1.0
+           },
+           {
+             "address":"user2",
+             "percentage":1.0
+           }*/
          ],
          "requiredConfirmations":10,
          "defaultPayoutThreshold":"0.001",
@@ -61,10 +61,10 @@
             }
          ],
          "fees":[
-            {
-               "address":"AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11",
-               "percentage":1.0
-            }
+           /*{
+             "address":"user1",
+             "percentage":1.0
+           }*/
          ],
          "requiredConfirmations":10,
          "defaultPayoutThreshold":"4",

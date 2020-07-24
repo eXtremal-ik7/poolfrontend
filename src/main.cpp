@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
   configFd.read(configData.data(), 0, configData.size());
   configFd.close();
   rapidjson::Document document;
-  document.Parse(configData.c_str());
+  document.Parse<rapidjson::kParseCommentsFlag>(configData.c_str());
   if (document.HasParseError()) {
     LOG_F(ERROR, "Config file %s is not valid JSON", argv[1]);
     return 1;
@@ -111,10 +111,11 @@ int main(int argc, char *argv[])
       workerThreadsNum = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() / 4 : 2;
 
     // Calculate total threads num
+    unsigned backendsNum = static_cast<unsigned>(config.Coins.size());
     totalThreadsNum =
       1 +                   // Monitor (listeners and clients polling)
       workerThreadsNum +    // Share checkers
-      config.Coins.size() + // Backends
+      backendsNum +         // Backends
       1;                    // HTTP server
     LOG_F(INFO, "Worker threads: %u; total pool threads: %u", workerThreadsNum, totalThreadsNum);
 

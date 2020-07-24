@@ -15,7 +15,7 @@ static const char *unitType(EUnitType type)
     "OTHER"
   };
 
-  return types[std::min(type, EOTHER)];
+  return types[std::min(type, EUnitTypeOther)];
 }
 
 std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> PoolHttpConnection::FunctionNameMap_ = {

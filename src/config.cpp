@@ -116,7 +116,7 @@ static inline void jsonParseStringArray(const rapidjson::Value &value, const cha
   if (value.HasMember(name)) {
     if (value[name].IsArray()) {
       rapidjson::Value::ConstArray array = value[name].GetArray();
-      for (size_t i = 0; i < array.Size(); i++) {
+      for (rapidjson::SizeType i = 0; i < array.Size(); i++) {
         if (!array[i].IsString()) {
           setErrorDescription(ETypeMismatch, validAcc, place, name, "array of string", errorDescription);
           break;
@@ -180,7 +180,7 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
   {
     auto array = value["nodes"].GetArray();
     Nodes.resize(array.Size());
-    for (size_t i = 0, ie = array.Size(); i != ie; ++i)
+    for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i)
       Nodes[i].load(array[i], localPath, errorDescription, error);
   }
 
@@ -197,7 +197,7 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
   {
     auto array = value["fees"].GetArray();
     Fees.resize(array.Size());
-    for (size_t i = 0, ie = array.Size(); i != ie; ++i) {
+    for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i) {
       Fees[i].load(array[i], localPath, errorDescription, error);
     }
   }
@@ -262,7 +262,7 @@ bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &error
   {
     auto array = document["coins"].GetArray();
     Coins.resize(array.Size());
-    for (size_t i = 0, ie = array.Size(); i != ie; ++i)
+    for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i)
       Coins[i].load(array[i], errorDescription, &error);
   }
 
@@ -278,7 +278,7 @@ bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &error
   {
     auto array = document["instances"].GetArray();
     Instances.resize(array.Size());
-    for (size_t i = 0, ie = array.Size(); i != ie; ++i)
+    for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i)
       Instances[i].load(document, array[i], errorDescription, &error);
   }
 

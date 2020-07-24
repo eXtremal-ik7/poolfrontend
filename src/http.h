@@ -20,7 +20,7 @@ private:
   static void writeCb(AsyncOpStatus, aioObject*, size_t, void *arg) { static_cast<PoolHttpConnection*>(arg)->onWrite(); }
 
   void onWrite();
-  void onRead(AsyncOpStatus status, size_t size);
+  void onRead(AsyncOpStatus status, size_t);
   int onParse(HttpRequestComponent *component);
   void close();
 

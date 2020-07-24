@@ -238,7 +238,7 @@ void PoolHttpConnection::onWrite()
   aioRead(Socket_, buffer, sizeof(buffer), afNone, 0, readCb, this);
 }
 
-void PoolHttpConnection::onRead(AsyncOpStatus status, size_t size)
+void PoolHttpConnection::onRead(AsyncOpStatus status, size_t)
 {
   if (status != aosSuccess) {
     close();

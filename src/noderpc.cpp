@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 
   // Create node
   if (type == "bitcoinrpc") {
-    context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address.c_str(), login.c_str(), password.c_str()));
+    context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address.c_str(), login.c_str(), password.c_str(), true));
   }
 
   if (command == "getBalance") {

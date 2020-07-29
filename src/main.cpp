@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.Nodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
-          client = new CBitcoinRpcClient(base, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str());
+          client = new CBitcoinRpcClient(base, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
         } else {
           LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
           return 1;

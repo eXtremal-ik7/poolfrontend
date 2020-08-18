@@ -1,3 +1,22 @@
+# Table of contents
+
+* [Common status values suitable for all operations](#common-status-values-suitable-for-all-operations)
+* [User management](#user-management)
+   * [userCreate](#usercreate)
+   * [userResendEmail](#userresendemail)
+   * [userAction](#useraction)
+   * [userLogin](#userlogin)
+   * [userLogout](#userlogout)
+   * [userGetCredentials](#usergetcredentials)
+   * [userUpdateSettings](#userupdatesettings)
+* [Backend API functions](#backend-api-functions)
+   * [backendManualPayout](#backendmanualpayout)
+   * [backendQueryUserBalance](#backendqueryuserbalance)
+   * [backendQueryFoundBlocks](#backendqueryfoundblocks)
+   * [backendQueryPayouts](#backendquerypayouts)
+   * [backendQueryPoolStats](#backendquerypoolstats)
+   * [backendQueryUserStats](#backendqueryuserstats)
+
 # Common status values suitable for all operations
 
 * ok: operation success
@@ -241,6 +260,8 @@ curl -X POST -d "{\"id\": \"147a30085b6f45a693e1dd2ec2c69642eb15df4fd53256111522
 ```
 {"status": "ok"}
 ```
+
+# Backend API functions
 
 ## backendManualPayout
 Force payout all funds from user balance

@@ -49,20 +49,11 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  char logFileName[64];
-  {
-    auto t = time(nullptr);
-    auto now = localtime(&t);
-    snprintf(logFileName, sizeof(logFileName), "poolfrontend-%04u-%02u-%02u.log", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
-  }
-
-  loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
   loguru::g_preamble_thread = true;
   loguru::g_preamble_file = true;
   loguru::g_flush_interval_ms = 100;
+  loguru::g_stderr_verbosity = loguru::Verbosity_1;
   loguru::init(argc, argv);
-  loguru::add_file(logFileName, loguru::Append, loguru::Verbosity_INFO);
-  loguru::g_stderr_verbosity = 1;
   loguru::set_thread_name("main");
 
   PoolBackendConfig backendConfig;
@@ -102,9 +93,19 @@ int main(int argc, char *argv[])
   }
 
   {
+    poolContext.DatabasePath = config.DbPath;
+
+    {
+      char logFileName[64];
+      auto t = time(nullptr);
+      auto now = localtime(&t);
+      snprintf(logFileName, sizeof(logFileName), "poolfrontend-%04u-%02u-%02u.log", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
+      std::filesystem::path logFilePath(poolContext.DatabasePath);
+      loguru::add_file((poolContext.DatabasePath / logFileName).u8string().c_str(), loguru::Append, loguru::Verbosity_1);
+    }
+
     // Analyze config
     poolContext.IsMaster = config.IsMaster;
-    poolContext.DatabasePath = config.DbPath;
     poolContext.HttpPort = config.HttpPort;
     workerThreadsNum = config.WorkerThreadsNum;
     if (workerThreadsNum == 0)
@@ -168,7 +169,7 @@ int main(int argc, char *argv[])
 
       // Inherited pool config parameters
       backendConfig.isMaster = poolContext.IsMaster;
-      backendConfig.dbPath = poolContext.DatabasePath;
+      backendConfig.dbPath = poolContext.DatabasePath / coinInfo.Name;
 
       // Backend parameters
       if (!parseMoneyValue(coinConfig.DefaultPayoutThreshold.c_str(), coinInfo.RationalPartSize, &backendConfig.DefaultPayoutThreshold)) {
@@ -187,11 +188,10 @@ int main(int argc, char *argv[])
       backendConfig.ConfirmationsCheckInterval = coinConfig.ConfirmationsCheckInterval * 60 * 1000000;
       backendConfig.PayoutInterval = coinConfig.PayoutInterval * 60 * 1000000;
       backendConfig.BalanceCheckInterval = coinConfig.BalanceCheckInterval * 60 * 1000000;
-      backendConfig.StatisticCheckInterval = coinConfig.StatisticCheckInterval * 60 * 1000000;
 
       backendConfig.MiningAddress = coinConfig.MiningAddress;
       if (!coinInfo.checkAddress(backendConfig.MiningAddress, coinInfo.PayoutAddressType)) {
-        LOG_F(ERROR, "Invalid pool fee address: %s", backendConfig.MiningAddress.c_str());
+        LOG_F(ERROR, "Invalid mining address: %s", backendConfig.MiningAddress.c_str());
         return 1;
       }
 
@@ -257,7 +257,7 @@ int main(int argc, char *argv[])
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
-      }
+      }          
 
       for (const auto &linkedCoinName: instanceConfig.Backends) {
         auto It = poolContext.CoinIdxMap.find(linkedCoinName);

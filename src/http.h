@@ -44,11 +44,15 @@ private:
   void onBackendManualPayout();
   void onBackendQueryUserBalance();
   void onBackendQueryUserStats();
+  void onBackendQueryUserStatsHistory();
+  void onBackendQueryWorkerStatsHistory();
   void onBackendQueryFoundBlocks();
   void onBackendQueryPayouts();
   void onBackendQueryPoolBalance();
   void onBackendQueryPoolStats();
+  void onBackendQueryPoolStatsHistory();
 
+  void queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, uint64_t timeFrom, uint64_t timeTo, uint64_t groupByInterval);
   void replyWithStatus(const char *status);
 
 private:
@@ -72,10 +76,13 @@ private:
     fnBackendManualPayout,
     fnBackendQueryUserBalance,
     fnBackendQueryUserStats,
+    fnBackendQueryUserStatsHistory,
+    fnBackendQueryWorkerStatsHistory,
     fnBackendQueryFoundBlocks,
     fnBackendQueryPayouts,
     fnBackendQueryPoolBalance,
-    fnBackendQueryPoolStats
+    fnBackendQueryPoolStats,
+    fnBackendQueryPoolStatsHistory
 
     // Statistic functions
   };
@@ -109,12 +116,12 @@ public:
   void stop();
 
   UserManager &userManager() { return UserMgr_; }
-  PoolBackend *backend(size_t i) { return Backends_[i].get(); }
+  PoolBackend *backend(size_t i) { return Backends_[i]; }
   PoolBackend *backend(const std::string &coin) {
     auto It = CoinIdxMap_.find(coin);
-    return It != CoinIdxMap_.end() ? Backends_[It->second].get() : nullptr;
+    return It != CoinIdxMap_.end() ? Backends_[It->second] : nullptr;
   }
-  size_t backendsNum() { return Backends_.size(); }
+  std::vector<PoolBackend*> &backends() { return Backends_; }
 
 private:
   static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);
@@ -125,8 +132,8 @@ private:
   asyncBase *Base_;
   uint16_t Port_;
   UserManager &UserMgr_;
-  std::vector<std::unique_ptr<PoolBackend>> &Backends_;
-  std::unordered_map<std::string, size_t> &CoinIdxMap_;
+  std::vector<PoolBackend*> Backends_;
+  std::unordered_map<std::string, size_t> CoinIdxMap_;
 
   std::thread Thread_;
   aioObject *ListenerSocket_;

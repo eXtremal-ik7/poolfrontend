@@ -795,7 +795,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
   });
 }
 
-void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, uint64_t timeFrom, uint64_t timeTo, uint64_t groupByInterval)
+void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval)
 {
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   backend->queryStatsHistory(login, worker, timeFrom, timeTo, groupByInterval, [this, backend](const std::vector<StatisticDb::CStats> &stats) {
@@ -841,16 +841,17 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
     return;
   }
 
+  int64_t currentTime = time(nullptr);
   std::string sessionId;
   std::string coin;
-  uint64_t timeFrom;
-  uint64_t timeTo;
-  uint64_t groupByInterval;
+  int64_t timeFrom;
+  int64_t timeTo;
+  int64_t groupByInterval;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
-  jsonParseUInt64(document, "timeFrom", &timeFrom, std::numeric_limits<uint64_t>::max(), &validAcc);
-  jsonParseUInt64(document, "timeTo", &timeTo, std::numeric_limits<uint64_t>::max(), &validAcc);
-  jsonParseUInt64(document, "groupByInterval", &groupByInterval, 3600, &validAcc);
+  jsonParseInt64(document, "timeFrom", &timeFrom, currentTime - 24*3600, &validAcc);
+  jsonParseInt64(document, "timeTo", &timeTo, currentTime, &validAcc);
+  jsonParseInt64(document, "groupByInterval", &groupByInterval, 3600, &validAcc);
 
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -883,18 +884,19 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
     return;
   }
 
+  int64_t currentTime = time(nullptr);
   std::string sessionId;
   std::string coin;
   std::string workerId;
-  uint64_t timeFrom;
-  uint64_t timeTo;
-  uint64_t groupByInterval;
+  int64_t timeFrom;
+  int64_t timeTo;
+  int64_t groupByInterval;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "coin", coin, &validAcc);
   jsonParseString(document, "workerId", workerId, &validAcc);
-  jsonParseUInt64(document, "timeFrom", &timeFrom, std::numeric_limits<uint64_t>::max(), &validAcc);
-  jsonParseUInt64(document, "timeTo", &timeTo, std::numeric_limits<uint64_t>::max(), &validAcc);
-  jsonParseUInt64(document, "groupByInterval", &groupByInterval, 3600, &validAcc);
+  jsonParseInt64(document, "timeFrom", &timeFrom, currentTime - 24*3600, &validAcc);
+  jsonParseInt64(document, "timeTo", &timeTo, currentTime, &validAcc);
+  jsonParseInt64(document, "groupByInterval", &groupByInterval, 3600, &validAcc);
 
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -1148,14 +1150,15 @@ void PoolHttpConnection::onBackendQueryPoolStatsHistory()
     return;
   }
 
+  int64_t currentTime = time(nullptr);
   std::string coin;
-  uint64_t timeFrom;
-  uint64_t timeTo;
-  uint64_t groupByInterval;
+  int64_t timeFrom;
+  int64_t timeTo;
+  int64_t groupByInterval;
   jsonParseString(document, "coin", coin, "", &validAcc);
-  jsonParseUInt64(document, "timeFrom", &timeFrom, std::numeric_limits<uint64_t>::max(), &validAcc);
-  jsonParseUInt64(document, "timeTo", &timeTo, std::numeric_limits<uint64_t>::max(), &validAcc);
-  jsonParseUInt64(document, "groupByInterval", &groupByInterval, 3600, &validAcc);
+  jsonParseInt64(document, "timeFrom", &timeFrom, currentTime - 24*3600, &validAcc);
+  jsonParseInt64(document, "timeTo", &timeTo, currentTime, &validAcc);
+  jsonParseInt64(document, "groupByInterval", &groupByInterval, 3600, &validAcc);
 
   if (!validAcc) {
     replyWithStatus("json_format_error");

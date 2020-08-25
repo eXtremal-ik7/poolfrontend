@@ -37,6 +37,11 @@ struct CFeeConfig {
   void load(const rapidjson::Value &value, const std::string &path, std::string &errorDescription, EErrorType *error);
 };
 
+struct CMiningAddressConfig {
+  std::string Address;
+  uint32_t Weight;
+};
+
 struct CCoinConfig {
   std::string Name;
   std::vector<CNodeConfig> Nodes;
@@ -52,7 +57,7 @@ struct CCoinConfig {
   unsigned StatisticCheckInterval;
   unsigned ShareTarget;
   unsigned StratumWorkLifeTime;
-  std::string MiningAddress;
+  std::vector<CMiningAddressConfig> MiningAddresses;
   std::string CoinbaseMsg;
 
   void load(const rapidjson::Value &value, std::string &errorDescription, EErrorType *error);

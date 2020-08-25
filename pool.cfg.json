@@ -47,7 +47,7 @@
          "statisticCheckInterval":1,
          "shareTarget":2048,
          "stratumWorkLifeTime":9,
-         "miningAddress":"1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u",
+         "miningAddresses":[{"address":"1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u", "weight": 1}],
          "coinbaseMsg":"BTC!"
       },
       {
@@ -76,7 +76,7 @@
          "balanceCheckInterval":3,
          "statisticCheckInterval":1,
          "shareTarget":7,
-         "miningAddress":"AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11",
+         "miningAddresses":[{"address": "AMwCMstRDSmAzjChVHZ5uUcHWBuLPEFV11", "weight": 1}],
          "coinbaseMsg":"XPM!"
       }
    ],
@@ -87,6 +87,7 @@
          "type":"BTC",
          "protocol":"stratum",
          "port":3456,
+         "shareDiff":65536,
          "backends":[
             "BTC"
          ]

@@ -189,10 +189,13 @@ int main(int argc, char *argv[])
       backendConfig.PayoutInterval = coinConfig.PayoutInterval * 60 * 1000000;
       backendConfig.BalanceCheckInterval = coinConfig.BalanceCheckInterval * 60 * 1000000;
 
-      backendConfig.MiningAddress = coinConfig.MiningAddress;
-      if (!coinInfo.checkAddress(backendConfig.MiningAddress, coinInfo.PayoutAddressType)) {
-        LOG_F(ERROR, "Invalid mining address: %s", backendConfig.MiningAddress.c_str());
-        return 1;
+      for (const auto &addr: coinConfig.MiningAddresses) {
+        if (!coinInfo.checkAddress(addr.Address, coinInfo.PayoutAddressType)) {
+          LOG_F(ERROR, "Invalid mining address: %s", addr.Address.c_str());
+          return 1;
+        }
+
+        backendConfig.MiningAddresses.add(addr.Address, addr.Weight);
       }
 
       backendConfig.CoinBaseMsg = coinConfig.CoinbaseMsg;
@@ -257,7 +260,7 @@ int main(int argc, char *argv[])
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
-      }          
+      }
 
       for (const auto &linkedCoinName: instanceConfig.Backends) {
         auto It = poolContext.CoinIdxMap.find(linkedCoinName);

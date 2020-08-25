@@ -213,8 +213,21 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
   jsonParseUInt(value, "balanceCheckInterval", &BalanceCheckInterval, error, localPath, errorDescription);
   jsonParseUInt(value, "statisticCheckInterval", &StatisticCheckInterval, error, localPath, errorDescription);
   jsonParseUInt(value, "shareTarget", &ShareTarget, error, localPath, errorDescription);
-  jsonParseUInt(value, "stratumWorkLifeTime", &StratumWorkLifeTime, 0, error, localPath, errorDescription);
-  jsonParseString(value, "miningAddress", MiningAddress, error, localPath, errorDescription);
+  jsonParseUInt(value, "stratumWorkLifeTime", &StratumWorkLifeTime, 0, error, localPath, errorDescription); 
+  if (!value.HasMember("miningAddresses") || !value["miningAddresses"].IsArray()) {
+    setErrorDescription(ETypeMismatch, error, localPath, "miningAddress", "array of objects", errorDescription);
+    return;
+  }
+
+  {
+    auto array = value["miningAddresses"].GetArray();
+    MiningAddresses.resize(array.Size());
+    for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i) {
+      jsonParseString(array[i], "address", MiningAddresses[i].Address, error, localPath + " -> miningAddresses", errorDescription);
+      jsonParseUInt(array[i], "weight", &MiningAddresses[i].Weight, error, localPath + " -> miningAddresses", errorDescription);
+    }
+  }
+
   jsonParseString(value, "coinbaseMsg", CoinbaseMsg, "", error, localPath, errorDescription);
 }
 

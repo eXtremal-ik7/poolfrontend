@@ -462,6 +462,7 @@ Returns pool statistic for each coin
   * shareRate:float - shares per second
   * shareWork:float - aggregated work for last N minutes (frontend better to use 'power' field value)
   * power:integer - usually hashrate, depends on coin type
+  * lastShareTime:integer - time of last received shared by pool
 
 ### curl example:
 ```
@@ -482,9 +483,10 @@ curl -X POST -d '{}' http://localhost:18880/api/backendQueryPoolStats
          "powerMultLog10":6,
          "clients":1,
          "workers":1,
-         "shareRate":0.032,
-         "shareWork":1.750,
-         "power":33
+         "shareRate":0.024,
+         "shareWork":0.800,
+         "power":10,
+         "lastShareTime":1598655660
       }
    ]
 }
@@ -565,11 +567,13 @@ Returns user statistic (aggregate and for each worker)
   * shareRate:float - shares per second
   * shareWork:float - aggregated work for last N minutes
   * power:integer - usually hashrate, depends on coin type
+  * lastShareTime:integer - time of last received shared by user
 * workers: array of objects with these fields:
   * name:string - worker name
   * shareRate:float - shares per second
   * shareWork:float - aggregated work for last N minutes
   * power:integer - usually hashrate, depends on coin type
+  * lastShareTime:integer - time of last received shared by worker
 
 ### curl example:
 ```
@@ -584,17 +588,19 @@ curl -X POST -d '{"id": "ae860bab2faca258c790563a5f97640e55c3c8f23df3fbfde07ed46
    "powerMultLog10":6,
    "total":{
       "clients":1,
-      "workers":0,
-      "shareRate":0.032,
-      "shareWork":0.000,
-      "power":34
+      "workers":1,
+      "shareRate":0.052,
+      "shareWork":4.400,
+      "power":22,
+      "lastShareTime":1598655660
    },
    "workers":[
       {
          "name":"cpu",
-         "shareRate":0.032,
-         "shareWork":6.500,
-         "power":34
+         "shareRate":0.052,
+         "shareWork":4.400,
+         "power":22,
+         "lastShareTime":1598655660
       }
    ]
 }

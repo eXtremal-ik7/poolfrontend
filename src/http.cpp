@@ -771,6 +771,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
         total.addDouble("shareRate", aggregate.SharesPerSecond);
         total.addDouble("shareWork", aggregate.SharesWork);
         total.addInt("power", aggregate.AveragePower);
+        total.addInt("lastShareTime", aggregate.LastShareTime);
       }
 
       object.addField("workers");
@@ -784,6 +785,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
             workerOutput.addDouble("shareRate", workers[i].SharesPerSecond);
             workerOutput.addDouble("shareWork", workers[i].SharesWork);
             workerOutput.addInt("power", workers[i].AveragePower);
+            workerOutput.addInt("lastShareTime", workers[i].LastShareTime);
           }
         }
       }
@@ -1093,6 +1095,7 @@ void PoolHttpConnection::onBackendQueryPoolStats()
             statsObject.addDouble("shareRate", record.SharesPerSecond);
             statsObject.addDouble("shareWork", record.SharesWork);
             statsObject.addInt("power", record.AveragePower);
+            statsObject.addInt("lastShareTime", record.LastShareTime);
           }
         }
       }

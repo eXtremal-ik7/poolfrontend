@@ -20,6 +20,7 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userGetSettings", {hmPost, fnUserGetSettings}},
   {"userUpdateCredentials", {hmPost, fnUserUpdateCredentials}},
   {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
+  {"userEnumerateAll", {hmPost, fnUserEnumerateAll}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
   {"backendQueryFoundBlocks", {hmPost, fnBackendQueryFoundBlocks}},
@@ -187,6 +188,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserGetSettings: onUserGetSettings(); break;
       case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
       case fnUserUpdateSettings: onUserUpdateSettings(); break;
+      case fnUserEnumerateAll: onUserEnumerateAll(); break;
       case fnBackendManualPayout: onBackendManualPayout(); break;
       case fnBackendQueryUserBalance: onBackendQueryUserBalance(); break;
       case fnBackendQueryUserStats: onBackendQueryUserStats(); break;
@@ -578,6 +580,60 @@ void PoolHttpConnection::onUserUpdateSettings()
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().updateSettings(std::move(settings), [this](const char *status) {
     replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
+void PoolHttpConnection::onUserEnumerateAll()
+{
+  std::string sessionId;
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  jsonParseString(document, "id", sessionId, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, "", login) || login != "admin") {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().enumerateUsers([this](const std::vector<UserManager::Credentials> &allUsers) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    {
+      JSON::Object object(stream);
+      object.addString("status", "ok");
+      object.addField("users");
+      {
+        JSON::Array usersArray(stream);
+        for (const auto &user: allUsers) {
+          usersArray.addField();
+          {
+            JSON::Object userObject(stream);
+            userObject.addString("login", user.Login);
+            userObject.addString("name", user.Name);
+            userObject.addString("email", user.EMail);
+            userObject.addInt("registrationDate", user.RegistrationDate);
+          }
+        }
+      }
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }

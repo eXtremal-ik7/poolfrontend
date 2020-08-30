@@ -40,6 +40,7 @@ private:
   void onUserGetSettings();
   void onUserUpdateCredentials();
   void onUserUpdateSettings();
+  void onUserEnumerateAll();
 
   void onBackendManualPayout();
   void onBackendQueryUserBalance();
@@ -71,6 +72,7 @@ private:
     fnUserGetSettings,
     fnUserUpdateCredentials,
     fnUserUpdateSettings,
+    fnUserEnumerateAll,
 
     // Backend functions
     fnBackendManualPayout,

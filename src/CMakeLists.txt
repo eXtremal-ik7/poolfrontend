@@ -7,18 +7,12 @@ HunterGate(
 cmake_minimum_required(VERSION 3.11)
 project(poolfrontend)
 
-set (CMAKE_CXX_STANDARD 17)
+set (CMAKE_CXX_STANDARD 20)
 option(SANITIZER_ENABLED "Build with address sanitizer" OFF)
-option(GPROF_ENABLED "Build with GNU profiler (use gprof ./exename -p > out.txt)" OFF)
 
 if (SANITIZER_ENABLED)
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
-endif()
-
-if (GPROF_ENABLED)
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg")
-  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
 endif()
 
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
@@ -62,6 +56,7 @@ include_directories(
   ${CMAKE_SOURCE_DIR}/include
   ${poolcore_SOURCE_DIR}/src/include
   ${poolcore_BINARY_DIR}
+  ${poolcore_BINARY_DIR}/include
   ${libp2p_SOURCE_DIR}/include
   ${libp2p_BINARY_DIR}/include
 )
@@ -113,3 +108,10 @@ add_executable(noderpc
 )
 
 target_link_libraries(noderpc ${LIBRARIES})
+
+# Password hasher
+add_executable(passwordhash
+  passwordHash.cpp
+)
+
+target_link_libraries(passwordhash ${LIBRARIES})

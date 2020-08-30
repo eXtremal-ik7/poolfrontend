@@ -125,6 +125,9 @@ int main(int argc, char *argv[])
 
     // Base config
     poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostAddress, config.PoolActivateLinkPrefix);
+    // Admin password
+    if (!config.AdminPasswordHash.empty())
+      poolContext.UserMgr->setAdminPassword(config.AdminPasswordHash);
 
     // SMTP config
     if (config.SmtpEnabled) {

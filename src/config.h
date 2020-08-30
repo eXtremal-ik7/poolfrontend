@@ -67,6 +67,7 @@ struct CPoolFrontendConfig {
   bool IsMaster;
   unsigned HttpPort;
   unsigned WorkerThreadsNum;
+  std::string AdminPasswordHash;
   std::string DbPath;
   std::string PoolName;
   std::string PoolHostAddress;

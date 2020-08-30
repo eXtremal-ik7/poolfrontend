@@ -419,6 +419,7 @@ void PoolHttpConnection::onUserChangePassword()
 void PoolHttpConnection::onUserGetCredentials()
 {
   std::string sessionId;
+  std::string targetLogin;
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
@@ -428,6 +429,7 @@ void PoolHttpConnection::onUserGetCredentials()
   }
 
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
@@ -440,7 +442,7 @@ void PoolHttpConnection::onUserGetCredentials()
 
   std::string login;
   UserManager::Credentials credentials;
-  if (Server_.userManager().validateSession(sessionId, login)) {
+  if (Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     if (Server_.userManager().getUserCredentials(login, credentials)) {
       jsonSerializeString(stream, "status", "ok");
       jsonSerializeString(stream, "name", credentials.Name.c_str());
@@ -461,6 +463,7 @@ void PoolHttpConnection::onUserGetCredentials()
 void PoolHttpConnection::onUserGetSettings()
 {
   std::string sessionId;
+  std::string targetLogin;
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
@@ -470,6 +473,7 @@ void PoolHttpConnection::onUserGetSettings()
   }
 
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
@@ -483,7 +487,7 @@ void PoolHttpConnection::onUserGetSettings()
   stream.write("\"coins\": [");
 
   std::string login;
-  if (Server_.userManager().validateSession(sessionId, login)) {
+  if (Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     bool firstIteration = true;
     for (const auto &coinInfo: Server_.userManager().coinInfo()) {
       if (!firstIteration)
@@ -526,6 +530,7 @@ void PoolHttpConnection::onUserUpdateCredentials()
 void PoolHttpConnection::onUserUpdateSettings()
 {
   std::string sessionId;
+  std::string targetLogin;
   UserSettingsRecord settings;
 
   bool validAcc = true;
@@ -538,6 +543,7 @@ void PoolHttpConnection::onUserUpdateSettings()
 
   std::string payoutThreshold;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", settings.Coin, &validAcc);
   jsonParseString(document, "address", settings.Address, &validAcc);
   jsonParseString(document, "payoutThreshold", payoutThreshold, &validAcc);
@@ -564,7 +570,7 @@ void PoolHttpConnection::onUserUpdateSettings()
     return;
   }
 
-  if (!Server_.userManager().validateSession(sessionId, settings.Login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, settings.Login)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -587,8 +593,10 @@ void PoolHttpConnection::onBackendManualPayout()
   }
 
   std::string sessionId;
+  std::string targetLogin;
   std::string coin;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -597,7 +605,7 @@ void PoolHttpConnection::onBackendManualPayout()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -636,8 +644,10 @@ void PoolHttpConnection::onBackendQueryUserBalance()
   }
 
   std::string sessionId;
+  std::string targetLogin;
   std::string coin;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -646,7 +656,7 @@ void PoolHttpConnection::onBackendQueryUserBalance()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -731,8 +741,10 @@ void PoolHttpConnection::onBackendQueryUserStats()
   }
 
   std::string sessionId;
+  std::string targetLogin;
   std::string coin;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -741,7 +753,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -845,11 +857,13 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
 
   int64_t currentTime = time(nullptr);
   std::string sessionId;
+  std::string targetLogin;
   std::string coin;
   int64_t timeFrom;
   int64_t timeTo;
   int64_t groupByInterval;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
   jsonParseInt64(document, "timeFrom", &timeFrom, currentTime - 24*3600, &validAcc);
   jsonParseInt64(document, "timeTo", &timeTo, currentTime, &validAcc);
@@ -862,7 +876,7 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -888,12 +902,14 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
 
   int64_t currentTime = time(nullptr);
   std::string sessionId;
+  std::string targetLogin;
   std::string coin;
   std::string workerId;
   int64_t timeFrom;
   int64_t timeTo;
   int64_t groupByInterval;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, &validAcc);
   jsonParseString(document, "workerId", workerId, &validAcc);
   jsonParseInt64(document, "timeFrom", &timeFrom, currentTime - 24*3600, &validAcc);
@@ -907,7 +923,7 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -990,10 +1006,12 @@ void PoolHttpConnection::onBackendQueryPayouts()
   }
 
   std::string sessionId;
+  std::string targetLogin;
   std::string coin;
   uint64_t timeFrom;
   unsigned count;
   jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
   jsonParseUInt64(document, "timeFrom", &timeFrom, 0, &validAcc);
   jsonParseUInt(document, "count", &count, 20, &validAcc);
@@ -1004,7 +1022,7 @@ void PoolHttpConnection::onBackendQueryPayouts()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
     replyWithStatus("unknown_id");
     return;
   }

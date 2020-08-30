@@ -6,6 +6,7 @@
       "poolName":"pool",
       "poolHostAddress":"localhost",
       "poolActivateLinkPrefix":"/actions/useracivate?id=",
+      "adminPasswordHash":"359f68836fd07e68b0c1a28535e856a5ec0689aac101aa4151105b8bec49a018",
       "smtpEnabled":false,
       "smtpServer":"smtp.gmail.com:25",
       "smtpLogin":"user",

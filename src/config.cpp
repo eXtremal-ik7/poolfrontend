@@ -251,6 +251,7 @@ bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &error
     jsonParseBoolean(object, "isMaster", &IsMaster, &error, localPath, errorDescription);
     jsonParseUInt(object, "httpPort", &HttpPort, &error, localPath, errorDescription);
     jsonParseUInt(object, "workerThreadsNum", &WorkerThreadsNum, 0, &error, localPath, errorDescription);
+    jsonParseString(object, "adminPasswordHash", AdminPasswordHash, "", &error, localPath, errorDescription);
     jsonParseString(object, "dbPath", DbPath, &error, localPath, errorDescription);
     jsonParseString(object, "poolName", PoolName, &error, localPath, errorDescription);
     jsonParseString(object, "poolHostAddress", PoolHostAddress, &error, localPath, errorDescription);

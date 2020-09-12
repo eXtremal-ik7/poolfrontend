@@ -126,6 +126,13 @@ static inline void jsonParseBoolean(rapidjson::Document &document, const char *n
     *validAcc = false;
 }
 
+static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool defaultValue, bool *validAcc) {
+  if (document.HasMember(name) && document[name].IsBool())
+    *out = document[name].GetBool();
+  else
+    *out = defaultValue;
+}
+
 static inline bool parseUserCredentials(const char *json, UserManager::Credentials &credentials)
 {
   bool validAcc = true;
@@ -799,11 +806,35 @@ void PoolHttpConnection::onBackendQueryUserStats()
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
+  uint64_t offset;
+  uint64_t size;
+  std::string sortBy;
+  bool sortDescending;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
+  jsonParseUInt64(document, "offset", &offset, 0, &validAcc);
+  jsonParseUInt64(document, "size", &size, 4096, &validAcc);
+  jsonParseString(document, "sortBy", sortBy, "name", &validAcc);
+  jsonParseBoolean(document, "sortDescending", &sortDescending, false, &validAcc);
+
   if (!validAcc) {
     replyWithStatus("json_format_error");
+    return;
+  }
+
+  // sortBy convert
+  StatisticDb::EStatsColumn column;
+  if (sortBy == "name") {
+    column = StatisticDb::EStatsColumnName;
+  } else if (sortBy == "averagePower") {
+    column = StatisticDb::EStatsColumnAveragePower;
+  } else if (sortBy == "sharesPerSecond") {
+    column = StatisticDb::EStatsColumnSharesPerSecond;
+  } else if (sortBy == "lastShareTime") {
+    column = StatisticDb::EStatsColumnLastShareTime;
+  } else {
+    replyWithStatus("unknown_column_name");
     return;
   }
 
@@ -863,7 +894,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
     finishChunk(stream, offset);
     aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
-  });
+  }, offset, size, column, sortDescending);
 }
 
 void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime)

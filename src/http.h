@@ -53,7 +53,7 @@ private:
   void onBackendQueryPoolStats();
   void onBackendQueryPoolStatsHistory();
 
-  void queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval);
+  void queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime);
   void replyWithStatus(const char *status);
 
 private:

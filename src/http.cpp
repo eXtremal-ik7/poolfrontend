@@ -444,7 +444,7 @@ void PoolHttpConnection::onUserGetCredentials()
 
   std::string login;
   UserManager::Credentials credentials;
-  if (Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     if (Server_.userManager().getUserCredentials(login, credentials)) {
       jsonSerializeString(stream, "status", "ok");
       jsonSerializeString(stream, "name", credentials.Name.c_str());
@@ -489,7 +489,7 @@ void PoolHttpConnection::onUserGetSettings()
   stream.write("\"coins\": [");
 
   std::string login;
-  if (Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     bool firstIteration = true;
     for (const auto &coinInfo: Server_.userManager().coinInfo()) {
       if (!firstIteration)
@@ -572,7 +572,7 @@ void PoolHttpConnection::onUserUpdateSettings()
     return;
   }
 
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, settings.Login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, settings.Login, true)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -602,7 +602,7 @@ void PoolHttpConnection::onUserEnumerateAll()
   }
 
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, "", login) || login != "admin") {
+  if (login != "admin" || login != "observer" || !Server_.userManager().validateSession(sessionId, "", login, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -661,7 +661,7 @@ void PoolHttpConnection::onBackendManualPayout()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, true)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -712,7 +712,7 @@ void PoolHttpConnection::onBackendQueryUserBalance()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -809,7 +809,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -831,6 +831,7 @@ void PoolHttpConnection::onBackendQueryUserStats()
       object.addString("status", "ok");
       object.addString("powerUnit", backend->getCoinInfo().getPowerUnitName());
       object.addInt("powerMultLog10", backend->getCoinInfo().PowerMultLog10);
+      object.addInt("currentTime", time(nullptr));
       object.addField("total");
       {
         JSON::Object total(stream);
@@ -865,10 +866,10 @@ void PoolHttpConnection::onBackendQueryUserStats()
   });
 }
 
-void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval)
+void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime)
 {
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->queryStatsHistory(login, worker, timeFrom, timeTo, groupByInterval, [this, backend](const std::vector<StatisticDb::CStats> &stats) {
+  backend->queryStatsHistory(login, worker, timeFrom, timeTo, groupByInterval, [this, backend, currentTime](const std::vector<StatisticDb::CStats> &stats) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -878,6 +879,7 @@ void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::stri
       object.addString("status", "ok");
       object.addString("powerUnit", backend->getCoinInfo().getPowerUnitName());
       object.addInt("powerMultLog10", backend->getCoinInfo().PowerMultLog10);
+      object.addInt("currentTime", currentTime);
       object.addField("stats");
       {
         JSON::Array workersOutput(stream);
@@ -932,7 +934,7 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -943,7 +945,7 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
     return;
   }
 
-  queryStatsHistory(backend, login, "", timeFrom, timeTo, groupByInterval);
+  queryStatsHistory(backend, login, "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
@@ -979,7 +981,7 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -990,7 +992,7 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
     return;
   }
 
-  queryStatsHistory(backend, login, workerId, timeFrom, timeTo, groupByInterval);
+  queryStatsHistory(backend, login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryFoundBlocks()
@@ -1078,7 +1080,7 @@ void PoolHttpConnection::onBackendQueryPayouts()
 
   // id -> login
   std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1155,6 +1157,7 @@ void PoolHttpConnection::onBackendQueryPoolStats()
       {
         JSON::Object object(stream);
         object.addString("status", "ok");
+        object.addInt("currentTime", time(nullptr));
         object.addField("stats");
         {
           JSON::Array statsArray(stream);
@@ -1248,7 +1251,7 @@ void PoolHttpConnection::onBackendQueryPoolStatsHistory()
     return;
   }
 
-  queryStatsHistory(backend, "", "", timeFrom, timeTo, groupByInterval);
+  queryStatsHistory(backend, "", "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 

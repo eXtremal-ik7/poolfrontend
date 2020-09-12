@@ -125,9 +125,11 @@ int main(int argc, char *argv[])
 
     // Base config
     poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostAddress, config.PoolActivateLinkPrefix);
-    // Admin password
+    // Admin & observer passwords
     if (!config.AdminPasswordHash.empty())
-      poolContext.UserMgr->setAdminPassword(config.AdminPasswordHash);
+      poolContext.UserMgr->addSpecialUser(UserManager::ESpecialUserAdmin, config.AdminPasswordHash);
+    if (!config.ObserverPasswordHash.empty())
+      poolContext.UserMgr->addSpecialUser(UserManager::ESpecialUserObserver, config.ObserverPasswordHash);
 
     // SMTP config
     if (config.SmtpEnabled) {
@@ -259,7 +261,7 @@ int main(int argc, char *argv[])
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(base, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(base, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instIdx, instIdxE, instanceConfig.InstanceConfig);
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
@@ -274,6 +276,8 @@ int main(int argc, char *argv[])
 
         poolContext.ClientsDispatcher[It->second]->connectWith(instance);
       }
+
+      poolContext.Instances[instIdx].reset(instance);
     }
   }
     

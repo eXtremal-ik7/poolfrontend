@@ -609,7 +609,7 @@ void PoolHttpConnection::onUserEnumerateAll()
   }
 
   std::string login;
-  if (login != "admin" || login != "observer" || !Server_.userManager().validateSession(sessionId, "", login, false)) {
+  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin" && login != "observer")) {
     replyWithStatus("unknown_id");
     return;
   }

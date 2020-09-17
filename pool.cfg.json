@@ -50,7 +50,8 @@
          "shareTarget":2048,
          "stratumWorkLifeTime":9,
          "miningAddresses":[{"address":"1JR4WrV8jxv7uaKKc5hwkMKGHqsAowBC3u", "weight": 1}],
-         "coinbaseMsg":"BTC!"
+         "coinbaseMsg":"BTC!",
+         "profitSwitchCoeff": 1.0
       },
       {
          "name":"XPM",
@@ -90,6 +91,7 @@
          "protocol":"stratum",
          "port":3456,
          "shareDiff":65536,
+         "profitSwitcherEnabled": false,
          "backends":[
             "BTC"
          ]

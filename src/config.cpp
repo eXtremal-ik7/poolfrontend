@@ -109,6 +109,34 @@ static inline void jsonParseFloat(const rapidjson::Value &value, const char *nam
   }
 }
 
+static inline void jsonParseDouble(const rapidjson::Value &value, const char *name, double *out, EErrorType *validAcc, const std::string &place, std::string &errorDescription) {
+  if (*validAcc != EOk)
+    return;
+
+  if (value.HasMember(name)) {
+    if (value[name].IsFloat())
+      *out = value[name].GetDouble();
+    else
+      setErrorDescription(ETypeMismatch, validAcc, place, name, "floating point number (like 1.0)", errorDescription);
+  } else {
+    setErrorDescription(ENotExists, validAcc, place, name, "floating point number (like 1.0)", errorDescription);
+  }
+}
+
+static inline void jsonParseDouble(const rapidjson::Value &value, const char *name, double *out, double defaultValue, EErrorType *validAcc, const std::string &place, std::string &errorDescription) {
+  if (*validAcc != EOk)
+    return;
+
+  if (value.HasMember(name)) {
+    if (value[name].IsFloat())
+      *out = value[name].GetDouble();
+    else
+      setErrorDescription(ETypeMismatch, validAcc, place, name, "floating point number (like 1.0)", errorDescription);
+  } else {
+    *out = defaultValue;
+  }
+}
+
 static inline void jsonParseStringArray(const rapidjson::Value &value, const char *name, std::vector<std::string> &out, EErrorType *validAcc, const std::string &place, std::string &errorDescription) {
   if (*validAcc != EOk)
     return;
@@ -229,6 +257,7 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
   }
 
   jsonParseString(value, "coinbaseMsg", CoinbaseMsg, "", error, localPath, errorDescription);
+  jsonParseDouble(value, "profitSwitchCoeff", &ProfitSwitchCoeff, 0.0, error, localPath, errorDescription);
 }
 
 bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &errorDescription)

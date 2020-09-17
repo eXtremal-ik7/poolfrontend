@@ -59,6 +59,7 @@ struct CCoinConfig {
   unsigned StratumWorkLifeTime;
   std::vector<CMiningAddressConfig> MiningAddresses;
   std::string CoinbaseMsg;
+  double ProfitSwitchCoeff;
 
   void load(const rapidjson::Value &value, std::string &errorDescription, EErrorType *error);
 };

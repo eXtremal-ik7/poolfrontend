@@ -7,6 +7,7 @@
 #include "poolcore/thread.h"
 #include "poolcommon/utils.h"
 #include "poolinstances/fabric.h"
+#include "poolinstances/stratum.h"
 
 #include "asyncio/asyncio.h"
 #include "asyncio/socket.h"
@@ -31,7 +32,8 @@ struct PoolContext {
   uint16_t HttpPort;
 
   std::vector<CCoinInfo> CoinList;
-  std::vector<std::unique_ptr<CNetworkClientDispatcher>> ClientsDispatcher;
+  std::vector<std::unique_ptr<CNetworkClientDispatcher>> ClientDispatchers;
+  std::vector<std::unique_ptr<CPriceFetcher>> PriceFetchers;
   std::vector<std::unique_ptr<PoolBackend>> Backends;
   std::unordered_map<std::string, size_t> CoinIdxMap;
 
@@ -62,7 +64,7 @@ int main(int argc, char *argv[])
   unsigned workerThreadsNum = 0;
 
   initializeSocketSubsystem();
-  asyncBase *base = createAsyncBase(amOSDefault);
+  asyncBase *monitorBase = createAsyncBase(amOSDefault);
 
   // Parse config
   FileDescriptor configFd;
@@ -231,12 +233,12 @@ int main(int argc, char *argv[])
       // backendConfig.poolTAddr;
 
       // Nodes
-      std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(base, coinInfo, totalThreadsNum));
+      std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(monitorBase, coinInfo, totalThreadsNum));
       for (size_t nodeIdx = 0, nodeIdxE = coinConfig.Nodes.size(); nodeIdx != nodeIdxE; ++nodeIdx) {
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.Nodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
-          client = new CBitcoinRpcClient(base, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
+          client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
         } else {
           LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
           return 1;
@@ -245,10 +247,18 @@ int main(int argc, char *argv[])
         dispatcher->addClient(client);
       }
 
+      // Initialize price fetcher
+      CPriceFetcher *priceFetcher = new CPriceFetcher(monitorBase, coinInfo);
+
       // Initialize backend
-      PoolBackend *backend = new PoolBackend(std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher);
+      PoolBackend *backend = new PoolBackend(std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher, *priceFetcher);
+
+      if (coinConfig.ProfitSwitchCoeff != 0.0)
+        backend->setProfitSwitchCoeff(coinConfig.ProfitSwitchCoeff);
+
       poolContext.Backends.emplace_back(backend);
-      poolContext.ClientsDispatcher.emplace_back(dispatcher.release());
+      poolContext.ClientDispatchers.emplace_back(dispatcher.release());
+      poolContext.PriceFetchers.emplace_back(priceFetcher);
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
       poolContext.CoinList.push_back(coinInfo);
       poolContext.CoinIdxMap[coinName] = coinIdx;
@@ -261,7 +271,7 @@ int main(int argc, char *argv[])
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(base, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instIdx, instIdxE, instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instIdx, instIdxE, instanceConfig.InstanceConfig);
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
@@ -274,7 +284,7 @@ int main(int argc, char *argv[])
           return 1;
         }
 
-        poolContext.ClientsDispatcher[It->second]->connectWith(instance);
+        poolContext.ClientDispatchers[It->second]->connectWith(instance);
       }
 
       poolContext.Instances[instIdx].reset(instance);
@@ -293,7 +303,7 @@ int main(int argc, char *argv[])
   }
 
   // Start clients polling
-  for (auto &dispatcher: poolContext.ClientsDispatcher) {
+  for (auto &dispatcher: poolContext.ClientDispatchers) {
     dispatcher->poll();
   }
 
@@ -306,13 +316,13 @@ int main(int argc, char *argv[])
     loguru::set_thread_name("monitor");
     LOG_F(INFO, "monitor started tid=%u", GetGlobalThreadId());
     asyncLoop(base);
-  }, base);
+  }, monitorBase);
 
   // Handle CTRL+C (SIGINT)
   signal(SIGINT, sigIntHandler);
   signal(SIGTERM, sigIntHandler);
 
-  std::thread sigIntThread([&base, &poolContext]() {
+  std::thread sigIntThread([&monitorBase, &poolContext]() {
     loguru::set_thread_name("sigint_monitor");
     while (!interrupted)
       std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -328,7 +338,7 @@ int main(int argc, char *argv[])
     poolContext.UserMgr->stop();
 
     // Stop monitor thread
-    postQuitOperation(base);
+    postQuitOperation(monitorBase);
   });
 
   sigIntThread.detach();

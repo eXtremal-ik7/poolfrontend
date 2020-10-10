@@ -13,6 +13,7 @@
    * [userEnumerateAll](#userenumerateall)
 * [Backend API functions](#backend-api-functions)
    * [backendManualPayout](#backendmanualpayout)
+   * [backendQueryCoins](#backendquerycoins)
    * [backendQueryUserBalance](#backendqueryuserbalance)
    * [backendQueryFoundBlocks](#backendqueryfoundblocks)
    * [backendQueryPayouts](#backendquerypayouts)
@@ -21,6 +22,8 @@
    * [backendQueryUserStats](#backendqueryuserstats)
    * [backendQueryUserStatsHistory](#backendqueryuserstatshistory)
    * [backendQueryWorkerStatsHistory](#backendqueryworkerstatshistory)
+   * [backendQueryProfitSwitchCoeff](#backendqueryprofitswitchcoeff)
+   * [backendUpdateProfitSwitchCoeff](#backendupdateprofitswitchcoeff)
 
 # Common status values suitable for all operations
 
@@ -324,6 +327,42 @@ curl -X POST -d '{"id": "ae860bab2faca258c790563a5f97640e55c3c8f23df3fbfde07ed46
 ### response examples:
 ```
 {"status": "ok","result": true}
+```
+
+## backendQueryCoins
+Function returns coins listed on pool
+
+### arguments:
+none
+
+### return values:
+array of objects with these fields:
+* name:string - unique coin id
+* fullName:string - display coin name
+
+### curl example:
+```curl -X POST http://localhost:18880/api/backendQueryCoins```
+
+### response examples:
+```
+[
+   {
+      "name":"BTC",
+      "fullName":"Bitcoin"
+   },
+   {
+      "name":"DGB.sha256",
+      "fullName":"Digibyte(sha256)"
+   },
+   {
+      "name":"BTC.regtest",
+      "fullName":"Bitcoin"
+   },
+   {
+      "name":"LTC.testnet",
+      "fullName":"Litecoin"
+   }
+]
 ```
 
 ## backendQueryUserBalance
@@ -711,4 +750,60 @@ Return history user or worker hashrate on selected time interval
       }
    ]
 }
+```
+
+## backendQueryProfitSwitchCoeff
+Function returns current profit switcher coefficients
+
+### arguments:
+none
+
+### return values:
+array of objects with these fields:
+* name:string - unique coin id
+* profitSwitchCoeff:double - current profit switcher coefficient
+
+### curl example:
+```curl -X POST http://localhost:18880/api/backendQueryProfitSwitchCoeff```
+
+### response exapmle:
+```
+[
+   {
+      "name":"BTC",
+      "profitSwitchCoeff":1.000
+   },
+   {
+      "name":"DGB.sha256",
+      "profitSwitchCoeff":1.000
+   },
+   {
+      "name":"BTC.regtest",
+      "profitSwitchCoeff":0.000
+   },
+   {
+      "name":"LTC.testnet",
+      "profitSwitchCoeff":0.000
+   }
+]
+```
+
+## backendUpdateProfitSwitchCoeff
+Function updates profit switcher coefficients
+
+### arguments:
+* [required] coin:string
+* [required] profitSwitchCoeff:double - new profit switcher coefficient
+
+### return values:
+* status:string - can be one of common status values
+
+### curl example:
+```
+curl -X POST -d '{"coin": "DGB.sha256", "profitSwitchCoeff": 0.5}' http://localhost:18880/api/backendUpdateProfitSwitchCoeff
+```
+
+### response exapmle:
+```
+{"status": "ok"}
 ```

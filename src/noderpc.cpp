@@ -54,6 +54,27 @@ void sendMoneyCoro(Context *context)
   LOG_F(INFO, "txid: %s; fee: %s %s", result.TxId.c_str(), FormatMoney(result.Fee, context->CoinInfo.RationalPartSize).c_str(), context->CoinInfo.Name.c_str());
 }
 
+void getBlockConfirmationCoro(Context *context)
+{
+  if (context->ArgsNum != 2) {
+    LOG_F(INFO, "Usage: getBlockConfirmation <hash> <height>");
+    return;
+  }
+
+  const char *blockHash = context->Argv[0];
+  const char *blockHeight = context->Argv[1];
+
+  std::vector<CNetworkClient::GetBlockConfirmationsQuery> query;
+  CNetworkClient::GetBlockConfirmationsQuery &queryElement = query.emplace_back();
+  queryElement.Hash = blockHash;
+  queryElement.Height = xatoi<uint64_t>(blockHeight);
+  if (context->Client->ioGetBlockConfirmations(context->Base, query)) {
+    LOG_F(INFO, "confirmations: %" PRId64 "", queryElement.Confirmations);
+  } else {
+    LOG_F(ERROR, "can't get confirmations for %s", blockHash);
+  }
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 7) {
@@ -84,13 +105,16 @@ int main(int argc, char **argv)
 
   context.CoinInfo = CCoinLibrary::get(coin.c_str());
   if (context.CoinInfo.Name.empty()) {
-    LOG_F(ERROR, "Unknown coin: %s\n", coin.c_str());
+    LOG_F(ERROR, "Unknown coin: %s", coin.c_str());
     return 1;
   }
 
   // Create node
   if (type == "bitcoinrpc") {
     context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address.c_str(), login.c_str(), password.c_str(), true));
+  } else {
+    LOG_F(ERROR, "unknown client type: %s", type.c_str());
+    return 1;
   }
 
   if (command == "getBalance") {
@@ -101,6 +125,11 @@ int main(int argc, char **argv)
   } else if (command == "sendMoney") {
     coroutineCall(coroutineNew([](void *arg) {
       sendMoneyCoro(static_cast<Context*>(arg));
+      postQuitOperation(static_cast<Context*>(arg)->Base);
+    }, &context, 0x10000));
+  } else if (command == "getBlockConfirmation") {
+    coroutineCall(coroutineNew([](void *arg) {
+      getBlockConfirmationCoro(static_cast<Context*>(arg));
       postQuitOperation(static_cast<Context*>(arg)->Base);
     }, &context, 0x10000));
   } else {

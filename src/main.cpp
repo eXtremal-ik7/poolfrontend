@@ -7,7 +7,6 @@
 #include "poolcore/thread.h"
 #include "poolcommon/utils.h"
 #include "poolinstances/fabric.h"
-#include "poolinstances/stratum.h"
 
 #include "asyncio/asyncio.h"
 #include "asyncio/socket.h"
@@ -103,7 +102,7 @@ int main(int argc, char *argv[])
       auto now = localtime(&t);
       snprintf(logFileName, sizeof(logFileName), "poolfrontend-%04u-%02u-%02u.log", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
       std::filesystem::path logFilePath(poolContext.DatabasePath);
-      loguru::add_file((poolContext.DatabasePath / logFileName).u8string().c_str(), loguru::Append, loguru::Verbosity_1);
+      loguru::add_file((poolContext.DatabasePath / logFileName).generic_string().c_str(), loguru::Append, loguru::Verbosity_1);
     }
 
     // Analyze config
@@ -227,6 +226,8 @@ int main(int argc, char *argv[])
           return 1;
         }
       }
+
+      std::sort(backendConfig.PoolFee.begin(), backendConfig.PoolFee.end(), [](const PoolFeeEntry &l, const PoolFeeEntry &r) { return l.User < r.User; });
 
       // ZEC specific
       // backendConfig.poolZAddr;

@@ -23,15 +23,18 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userEnumerateAll", {hmPost, fnUserEnumerateAll}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
+  {"backendQueryCoins", {hmPost, fnBackendQueryCoins}},
   {"backendQueryFoundBlocks", {hmPost, fnBackendQueryFoundBlocks}},
   {"backendQueryPayouts", {hmPost, fnBackendQueryPayouts}},
   {"backendQueryPoolBalance", {hmPost, fnBackendQueryPoolBalance}},
   {"backendQueryPoolStats", {hmPost, fnBackendQueryPoolStats}},
   {"backendQueryPoolStatsHistory", {hmPost, fnBackendQueryPoolStatsHistory}},
+  {"backendQueryProfitSwitchCoeff", {hmPost, fnBackendQueryProfitSwitchCoeff}},
   {"backendQueryUserBalance", {hmPost, fnBackendQueryUserBalance}},
   {"backendQueryUserStats", {hmPost, fnBackendQueryUserStats}},
   {"backendQueryUserStatsHistory", {hmPost, fnBackendQueryUserStatsHistory}},
-  {"backendQueryWorkerStatsHistory", {hmPost, fnBackendQueryWorkerStatsHistory}}
+  {"backendQueryWorkerStatsHistory", {hmPost, fnBackendQueryWorkerStatsHistory}},
+  {"backendUpdateProfitSwitchCoeff", {hmPost, fnBackendUpdateProfitSwitchCoeff}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
@@ -133,6 +136,20 @@ static inline void jsonParseBoolean(rapidjson::Document &document, const char *n
     *out = defaultValue;
 }
 
+static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
+  if (document.HasMember(name) && document[name].IsDouble())
+    *out = document[name].GetDouble();
+  else
+    *validAcc = false;
+}
+
+static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, bool defaultValue, bool *validAcc) {
+  if (document.HasMember(name) && document[name].IsDouble())
+    *out = document[name].GetDouble();
+  else
+    *out = defaultValue;
+}
+
 static inline bool parseUserCredentials(const char *json, UserManager::Credentials &credentials)
 {
   bool validAcc = true;
@@ -201,11 +218,14 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnBackendQueryUserStats: onBackendQueryUserStats(); break;
       case fnBackendQueryUserStatsHistory: onBackendQueryUserStatsHistory(); break;
       case fnBackendQueryWorkerStatsHistory: onBackendQueryWorkerStatsHistory(); break;
+      case fnBackendQueryCoins : onBackendQueryCoins(); break;
       case fnBackendQueryFoundBlocks: onBackendQueryFoundBlocks(); break;
       case fnBackendQueryPayouts: onBackendQueryPayouts(); break;
       case fnBackendQueryPoolBalance: onBackendQueryPoolBalance(); break;
       case fnBackendQueryPoolStats: onBackendQueryPoolStats(); break;
       case fnBackendQueryPoolStatsHistory : onBackendQueryPoolStatsHistory(); break;
+      case fnBackendQueryProfitSwitchCoeff : onBackendQueryProfitSwitchCoeff(); break;
+      case fnBackendUpdateProfitSwitchCoeff : onBackendUpdateProfitSwitchCoeff(); break;
       default:
         reply404();
         return 0;
@@ -1026,6 +1046,28 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
   queryStatsHistory(backend, login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
 }
 
+void PoolHttpConnection::onBackendQueryCoins()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  {
+    JSON::Array result(stream);
+    for (const auto &backend: Server_.backends()) {
+      result.addField();
+      {
+        JSON::Object object(stream);
+        const CCoinInfo &info = backend->getCoinInfo();
+        object.addString("name", info.Name);
+        object.addString("fullName", info.FullName);
+      }
+    }
+  }
+
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
 void PoolHttpConnection::onBackendQueryFoundBlocks()
 {
   bool validAcc = true;
@@ -1285,6 +1327,57 @@ void PoolHttpConnection::onBackendQueryPoolStatsHistory()
   queryStatsHistory(backend, "", "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
+void PoolHttpConnection::onBackendQueryProfitSwitchCoeff()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  {
+    JSON::Array result(stream);
+    for (const auto &backend: Server_.backends()) {
+      result.addField();
+      {
+        JSON::Object object(stream);
+        const CCoinInfo &info = backend->getCoinInfo();
+        object.addString("name", info.Name);
+        object.addDouble("profitSwitchCoeff", backend->getProfitSwitchCoeff());
+      }
+    }
+  }
+
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
+void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff()
+{
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string coin;
+  double profitSwitchCoeff = 0.0;
+  jsonParseString(document, "coin", coin, "", &validAcc);
+  jsonParseDouble(document, "profitSwitchCoeff", &profitSwitchCoeff, &validAcc);
+
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  PoolBackend *backend = Server_.backend(coin);
+  if (!backend) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  backend->setProfitSwitchCoeff(profitSwitchCoeff);
+  replyWithStatus("ok");
+}
 
 PoolHttpServer::PoolHttpServer(uint16_t port,
                                UserManager &userMgr,

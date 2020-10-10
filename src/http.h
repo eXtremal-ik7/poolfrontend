@@ -47,11 +47,14 @@ private:
   void onBackendQueryUserStats();
   void onBackendQueryUserStatsHistory();
   void onBackendQueryWorkerStatsHistory();
+  void onBackendQueryCoins();
   void onBackendQueryFoundBlocks();
   void onBackendQueryPayouts();
   void onBackendQueryPoolBalance();
   void onBackendQueryPoolStats();
   void onBackendQueryPoolStatsHistory();
+  void onBackendQueryProfitSwitchCoeff();
+  void onBackendUpdateProfitSwitchCoeff();
 
   void queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime);
   void replyWithStatus(const char *status);
@@ -76,6 +79,7 @@ private:
 
     // Backend functions
     fnBackendManualPayout,
+    fnBackendQueryCoins,
     fnBackendQueryUserBalance,
     fnBackendQueryUserStats,
     fnBackendQueryUserStatsHistory,
@@ -84,7 +88,9 @@ private:
     fnBackendQueryPayouts,
     fnBackendQueryPoolBalance,
     fnBackendQueryPoolStats,
-    fnBackendQueryPoolStatsHistory
+    fnBackendQueryPoolStatsHistory,
+    fnBackendQueryProfitSwitchCoeff,
+    fnBackendUpdateProfitSwitchCoeff
 
     // Statistic functions
   };

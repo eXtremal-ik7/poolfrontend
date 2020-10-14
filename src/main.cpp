@@ -169,8 +169,8 @@ int main(int argc, char *argv[])
       const char *coinName = coinConfig.Name.c_str();
       CCoinInfo coinInfo = CCoinLibrary::get(coinName);
       if (coinInfo.Name.empty()) {
-        LOG_F(ERROR, "Unknown coin: %s", coinName);
-        return 1;
+          LOG_F(ERROR, "Unknown coin: %s", coinName);
+          return 1;
       }
 
       // Inherited pool config parameters
@@ -185,6 +185,11 @@ int main(int argc, char *argv[])
 
       if (!parseMoneyValue(coinConfig.MinimalAllowedPayout.c_str(), coinInfo.RationalPartSize, &backendConfig.MinimalAllowedPayout)) {
         LOG_F(ERROR, "Can't load 'minimalPayout' from %s coin config", coinName);
+        return 1;
+      }
+
+      if (coinConfig.RequiredConfirmations < coinInfo.MinimalConfirmationsNumber) {
+        LOG_F(ERROR, "Minimal required confirmations for %s is %u", coinInfo.Name.c_str(), coinInfo.MinimalConfirmationsNumber);
         return 1;
       }
 

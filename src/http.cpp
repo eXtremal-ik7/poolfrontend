@@ -767,7 +767,7 @@ void PoolHttpConnection::onBackendQueryUserBalance()
           {
             JSON::Object balance(stream);
             balance.addString("coin", coinInfo.Name);
-            balance.addString("balance", FormatMoney(record.Balance, coinInfo.RationalPartSize));
+            balance.addString("balance", FormatMoney(record.Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
             balance.addString("requested", FormatMoney(record.Requested, coinInfo.RationalPartSize));
             balance.addString("paid", FormatMoney(record.Paid, coinInfo.RationalPartSize));
           }
@@ -797,7 +797,7 @@ void PoolHttpConnection::onBackendQueryUserBalance()
             {
               JSON::Object balance(stream);
               balance.addString("coin", coinInfo.Name);
-              balance.addString("balance", FormatMoney(balanceData[i].Balance, coinInfo.RationalPartSize));
+              balance.addString("balance", FormatMoney(balanceData[i].Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
               balance.addString("requested", FormatMoney(balanceData[i].Requested, coinInfo.RationalPartSize));
               balance.addString("paid", FormatMoney(balanceData[i].Paid, coinInfo.RationalPartSize));
             }
@@ -1329,6 +1329,28 @@ void PoolHttpConnection::onBackendQueryPoolStatsHistory()
 
 void PoolHttpConnection::onBackendQueryProfitSwitchCoeff()
 {
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string sessionId;
+  jsonParseString(document, "id", sessionId, &validAcc);
+
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin" && login != "observer")) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
@@ -1359,13 +1381,21 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff()
     return;
   }
 
+  std::string sessionId;
   std::string coin;
   double profitSwitchCoeff = 0.0;
+  jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
   jsonParseDouble(document, "profitSwitchCoeff", &profitSwitchCoeff, &validAcc);
 
   if (!validAcc) {
     replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin")) {
+    replyWithStatus("unknown_id");
     return;
   }
 

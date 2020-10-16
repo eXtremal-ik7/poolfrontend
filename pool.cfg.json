@@ -6,6 +6,7 @@
       "poolName":"pool",
       "poolHostAddress":"localhost",
       "poolActivateLinkPrefix":"/actions/useracivate?id=",
+      "poolChangePasswordLinkPrefix":"/actions/userChangePassword?id=",
       "adminPasswordHash":"359f68836fd07e68b0c1a28535e856a5ec0689aac101aa4151105b8bec49a018",
       "observerPasswordHash": "4a97aee443a3df33318e2107706c78fcf2ed2d0ca6b385649b76eed13385933f",
       "smtpEnabled":false,

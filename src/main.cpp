@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
     poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
 
     // Base config
-    poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostAddress, config.PoolActivateLinkPrefix);
+    poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostAddress, config.PoolActivateLinkPrefix, config.PoolChangePasswordLinkPrefix);
     // Admin & observer passwords
     if (!config.AdminPasswordHash.empty())
       poolContext.UserMgr->addSpecialUser(UserManager::ESpecialUserAdmin, config.AdminPasswordHash);
@@ -169,8 +169,8 @@ int main(int argc, char *argv[])
       const char *coinName = coinConfig.Name.c_str();
       CCoinInfo coinInfo = CCoinLibrary::get(coinName);
       if (coinInfo.Name.empty()) {
-          LOG_F(ERROR, "Unknown coin: %s", coinName);
-          return 1;
+        LOG_F(ERROR, "Unknown coin: %s", coinName);
+        return 1;
       }
 
       // Inherited pool config parameters

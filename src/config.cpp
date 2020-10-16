@@ -286,6 +286,7 @@ bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &error
     jsonParseString(object, "poolName", PoolName, &error, localPath, errorDescription);
     jsonParseString(object, "poolHostAddress", PoolHostAddress, &error, localPath, errorDescription);
     jsonParseString(object, "poolActivateLinkPrefix", PoolActivateLinkPrefix, &error, localPath, errorDescription);
+    jsonParseString(object, "poolChangePasswordLinkPrefix", PoolChangePasswordLinkPrefix, &error, localPath, errorDescription);
     jsonParseBoolean(object, "smtpEnabled", &SmtpEnabled, &error, localPath, errorDescription);
     jsonParseString(object, "smtpServer", SmtpServer, &error, localPath, errorDescription);
     jsonParseString(object, "smtpLogin", SmtpLogin, &error, localPath, errorDescription);

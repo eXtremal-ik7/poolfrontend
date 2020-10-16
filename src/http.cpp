@@ -16,6 +16,7 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userLogout", {hmPost, fnUserLogout}},
   {"userChangeEmail", {hmPost, fnUserChangeEmail}},
   {"userChangePassword", {hmPost, fnUserChangePassword}},
+  {"userChangePasswordInitiate", {hmPost, fnUserChangePasswordInitiate}},
   {"userGetCredentials", {hmPost, fnUserGetCredentials}},
   {"userGetSettings", {hmPost, fnUserGetSettings}},
   {"userUpdateCredentials", {hmPost, fnUserUpdateCredentials}},
@@ -208,6 +209,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserLogout: onUserLogout(); break;
       case fnUserChangeEmail: onUserChangeEmail(); break;
       case fnUserChangePassword: onUserChangePassword(); break;
+    case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(); break;
       case fnUserGetCredentials: onUserGetCredentials(); break;
       case fnUserGetSettings: onUserGetSettings(); break;
       case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
@@ -242,14 +244,14 @@ void PoolHttpConnection::onWrite()
   aioRead(Socket_, buffer, sizeof(buffer), afNone, 0, readCb, this);
 }
 
-void PoolHttpConnection::onRead(AsyncOpStatus status, size_t)
+void PoolHttpConnection::onRead(AsyncOpStatus status, size_t bytesRead)
 {
   if (status != aosSuccess) {
     close();
     return;
   }
 
-  httpRequestSetBuffer(&ParserState, buffer + oldDataSize, sizeof(buffer) - oldDataSize);
+  httpRequestSetBuffer(&ParserState, buffer, bytesRead + oldDataSize);
 
   switch (httpRequestParse(&ParserState, [](HttpRequestComponent *component, void *arg) -> int { return static_cast<PoolHttpConnection*>(arg)->onParse(component); }, this)) {
     case ParserResultOk : {
@@ -437,12 +439,52 @@ void PoolHttpConnection::onUserChangeEmail()
 
 void PoolHttpConnection::onUserChangePassword()
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string actionId;
+  std::string newPassword;
+  jsonParseString(document, "id", actionId, &validAcc);
+  jsonParseString(document, "newPassword", newPassword, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userChangePassword(actionId, newPassword, [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
+void PoolHttpConnection::onUserChangePasswordInitiate()
+{
+  bool validAcc = true;
+  rapidjson::Document document;
+  document.Parse(Context.Request.c_str());
+  if (document.HasParseError()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string login;
+  jsonParseString(document, "login", login, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userActionInitiate(login, UserActionRecord::UserChangePassword, [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onUserGetCredentials()

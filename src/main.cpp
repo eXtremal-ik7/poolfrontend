@@ -34,7 +34,7 @@ struct PoolContext {
   std::vector<std::unique_ptr<CNetworkClientDispatcher>> ClientDispatchers;
   std::vector<std::unique_ptr<CPriceFetcher>> PriceFetchers;
   std::vector<std::unique_ptr<PoolBackend>> Backends;
-  std::unordered_map<std::string, size_t> CoinIdxMap;
+  std::vector<std::unique_ptr<StatisticServer>> AlgoMetaStatistic;
 
   std::unique_ptr<CThreadPool> ThreadPool;
   std::vector<std::unique_ptr<CPoolInstance>> Instances;
@@ -163,6 +163,7 @@ int main(int argc, char *argv[])
     }
 
     // Initialize all backends
+    std::map<std::string, StatisticServer*> knownAlgo;
     for (size_t coinIdx = 0, coinIdxE = config.Coins.size(); coinIdx != coinIdxE; ++coinIdx) {
       PoolBackendConfig backendConfig;
       const CCoinConfig &coinConfig = config.Coins[coinIdx];
@@ -267,8 +268,27 @@ int main(int argc, char *argv[])
       poolContext.PriceFetchers.emplace_back(priceFetcher);
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
       poolContext.CoinList.push_back(coinInfo);
-      poolContext.CoinIdxMap[coinName] = coinIdx;
+
+      // Initialize algorithm meta statistic
+      auto AlgoIt = knownAlgo.find(coinInfo.Algorithm);
+      if (AlgoIt == knownAlgo.end()) {
+        CCoinInfo algoInfo = CCoinLibrary::get(coinInfo.Algorithm.c_str());
+        if (algoInfo.Name.empty()) {
+          LOG_F(ERROR, "Coin %s has unknown algorithm: %s", coinInfo.Name.c_str(), coinInfo.Algorithm.c_str());
+          return 1;
+        }
+
+        PoolBackendConfig algoConfig;
+        algoConfig.dbPath = poolContext.DatabasePath / algoInfo.Name;
+        StatisticServer *server = new StatisticServer(algoConfig, algoInfo);
+        poolContext.AlgoMetaStatistic.emplace_back(server);
+        AlgoIt = knownAlgo.insert(AlgoIt, std::make_pair(coinInfo.Algorithm, server));
+      }
+
+      backend->setAlgoMetaStatistic(AlgoIt->second);
     }
+
+    std::sort(poolContext.Backends.begin(), poolContext.Backends.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
 
     // Initialize workers
     poolContext.ThreadPool.reset(new CThreadPool(workerThreadsNum));
@@ -283,14 +303,25 @@ int main(int argc, char *argv[])
         return 1;
       }
 
+      std::string algo;
       for (const auto &linkedCoinName: instanceConfig.Backends) {
-        auto It = poolContext.CoinIdxMap.find(linkedCoinName);
-        if (It == poolContext.CoinIdxMap.end()) {
+        auto It = std::lower_bound(poolContext.Backends.begin(), poolContext.Backends.end(), linkedCoinName, [](const auto &backend, const std::string &name) { return backend->getCoinInfo().Name < name; });
+        if (It == poolContext.Backends.end() || (*It)->getCoinInfo().Name != linkedCoinName) {
           LOG_F(ERROR, "Instance %s linked with non-existent coin %s", instanceConfig.Name.c_str(), linkedCoinName.c_str());
           return 1;
         }
 
-        poolContext.ClientDispatchers[It->second]->connectWith(instance);
+        PoolBackend *linkedBackend = It->get();
+        if (!algo.empty() && linkedBackend->getCoinInfo().Algorithm != algo) {
+          LOG_F(ERROR, "Linked backends with different algorithms (%s and %s) to one instance %s", algo.c_str(), linkedBackend->getCoinInfo().Algorithm.c_str(), instanceConfig.Name.c_str());
+          return 1;
+        }
+
+        algo = linkedBackend->getCoinInfo().Algorithm;
+
+        linkedBackend->getClientDispatcher().connectWith(instance);
+        // TODO: send linked backend list to instance
+        instance->setAlgoMetaStatistic(linkedBackend->getAlgoMetaStatistic());
       }
 
       poolContext.Instances[instIdx].reset(instance);
@@ -308,12 +339,17 @@ int main(int argc, char *argv[])
     backend->start();
   }
 
+  // Start algorithm meta statistic servers
+  for (auto &server: poolContext.AlgoMetaStatistic) {
+    server->start();
+  }
+
   // Start clients polling
   for (auto &dispatcher: poolContext.ClientDispatchers) {
     dispatcher->poll();
   }
 
-  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.CoinIdxMap));
+  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.AlgoMetaStatistic));
   poolContext.HttpServer->start();
 
   // Start monitor thread
@@ -340,6 +376,8 @@ int main(int argc, char *argv[])
     // Stop backends
     for (auto &backend: poolContext.Backends)
       backend->stop();
+    for (auto &server: poolContext.AlgoMetaStatistic)
+      server->stop();
     // Stop user manager
     poolContext.UserMgr->stop();
 

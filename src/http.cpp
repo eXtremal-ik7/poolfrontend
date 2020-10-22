@@ -656,6 +656,11 @@ void PoolHttpConnection::onUserUpdateSettings()
 void PoolHttpConnection::onUserEnumerateAll()
 {
   std::string sessionId;
+  std::string coin;
+  uint64_t offset;
+  uint64_t size;
+  std::string sortBy;
+  bool sortDescending;
   bool validAcc = true;
   rapidjson::Document document;
   document.Parse(Context.Request.c_str());
@@ -665,6 +670,13 @@ void PoolHttpConnection::onUserEnumerateAll()
   }
 
   jsonParseString(document, "id", sessionId, &validAcc);
+  // TODO: remove sha256
+  jsonParseString(document, "coin", coin, "sha256", &validAcc);
+  jsonParseUInt64(document, "offset", &offset, 0, &validAcc);
+  jsonParseUInt64(document, "size", &size, 100, &validAcc);
+  jsonParseString(document, "sortBy", sortBy, "averagePower", &validAcc);
+  jsonParseBoolean(document, "sortDescending", &sortDescending, true, &validAcc);
+
   if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
@@ -676,34 +688,64 @@ void PoolHttpConnection::onUserEnumerateAll()
     return;
   }
 
-  objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().enumerateUsers([this](const std::vector<UserManager::Credentials> &allUsers) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
+  // sortBy convert
+  StatisticDb::CredentialsWithStatistic::EColumns column;
+  if (sortBy == "login") {
+    column = StatisticDb::CredentialsWithStatistic::ELogin;
+  } else if (sortBy == "workersNum") {
+    column = StatisticDb::CredentialsWithStatistic::EWorkersNum;
+  } else if (sortBy == "averagePower") {
+    column = StatisticDb::CredentialsWithStatistic::EAveragePower;
+  } else if (sortBy == "sharesPerSecond") {
+    column = StatisticDb::CredentialsWithStatistic::ESharesPerSecord;
+  } else if (sortBy == "lastShareTime") {
+    column = StatisticDb::CredentialsWithStatistic::ELastShareTime;
+  } else {
+    replyWithStatus("unknown_column_name");
+    return;
+  }
 
-    {
-      JSON::Object object(stream);
-      object.addString("status", "ok");
-      object.addField("users");
+  StatisticDb *statistic = Server_.statisticDb(coin);
+  if (!statistic) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().enumerateUsers([this, statistic, offset, size, column, sortDescending](std::vector<UserManager::Credentials> &allUsers) {
+    statistic->queryAllusersStats(std::move(allUsers), [this](const std::vector<StatisticDb::CredentialsWithStatistic> &result) {
+      xmstream stream;
+      reply200(stream);
+      size_t offset = startChunk(stream);
+
       {
-        JSON::Array usersArray(stream);
-        for (const auto &user: allUsers) {
-          usersArray.addField();
-          {
-            JSON::Object userObject(stream);
-            userObject.addString("login", user.Login);
-            userObject.addString("name", user.Name);
-            userObject.addString("email", user.EMail);
-            userObject.addInt("registrationDate", user.RegistrationDate);
+        JSON::Object object(stream);
+        object.addString("status", "ok");
+        object.addField("users");
+        {
+          JSON::Array usersArray(stream);
+          for (const auto &user: result) {
+            usersArray.addField();
+            {
+              JSON::Object userObject(stream);
+              userObject.addString("login", user.Login);
+              userObject.addString("name", user.Name);
+              userObject.addString("email", user.EMail);
+              userObject.addInt("registrationDate", user.RegistrationDate);
+              userObject.addInt("workers", user.WorkersNum);
+              userObject.addDouble("shareRate", user.SharesPerSecond);
+              userObject.addInt("power", user.AveragePower);
+              userObject.addInt("lastShareTime", user.LastShareTime);
+            }
           }
         }
       }
-    }
 
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
-    objectDecrementReference(aioObjectHandle(Socket_), 1);
+      finishChunk(stream, offset);
+      aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+      objectDecrementReference(aioObjectHandle(Socket_), 1);
+
+    }, offset, size, column, sortDescending);
   });
 }
 
@@ -742,7 +784,7 @@ void PoolHttpConnection::onBackendManualPayout()
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->manualPayout(login, [this](bool result) {
+  backend->accountingDb()->manualPayout(login, [this](bool result) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -794,7 +836,7 @@ void PoolHttpConnection::onBackendQueryUserBalance()
     }
 
     objectIncrementReference(aioObjectHandle(Socket_), 1);
-    backend->queryUserBalance(login, [this, backend](const UserBalanceRecord &record) {
+    backend->accountingDb()->queryUserBalance(login, [this, backend](const UserBalanceRecord &record) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -823,7 +865,12 @@ void PoolHttpConnection::onBackendQueryUserBalance()
   } else {
     // Ask all backends about balances
     objectIncrementReference(aioObjectHandle(Socket_), 1);
-    PoolBackend::queryUserBalanceMulti(&Server_.backends()[0], Server_.backends().size(), login, [this](const UserBalanceRecord *balanceData, size_t backendsNum) {
+
+    std::vector<AccountingDb*> accountingDbs(Server_.backends().size());
+    for (size_t i = 0, ie = Server_.backends().size(); i != ie; ++i)
+      accountingDbs[i] = Server_.backend(i)->accountingDb();
+
+    AccountingDb::queryUserBalanceMulti(&accountingDbs[0], accountingDbs.size(), login, [this](const UserBalanceRecord *balanceData, size_t backendsNum) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -907,14 +954,14 @@ void PoolHttpConnection::onBackendQueryUserStats()
     return;
   }
 
-  PoolBackend *backend = Server_.backend(coin);
-  if (!backend) {
+  StatisticDb *statistic = Server_.statisticDb(coin);
+  if (!statistic) {
     replyWithStatus("invalid_coin");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->queryUserStats(login, [this, backend](const StatisticDb::CStats &aggregate, const std::vector<StatisticDb::CStats> &workers) {
+  statistic->queryUserStats(login, [this, statistic](const StatisticDb::CStats &aggregate, const std::vector<StatisticDb::CStats> &workers) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -922,8 +969,8 @@ void PoolHttpConnection::onBackendQueryUserStats()
     {
       JSON::Object object(stream);
       object.addString("status", "ok");
-      object.addString("powerUnit", backend->getCoinInfo().getPowerUnitName());
-      object.addInt("powerMultLog10", backend->getCoinInfo().PowerMultLog10);
+      object.addString("powerUnit", statistic->getCoinInfo().getPowerUnitName());
+      object.addInt("powerMultLog10", statistic->getCoinInfo().PowerMultLog10);
       object.addInt("currentTime", time(nullptr));
       object.addField("total");
       {
@@ -959,10 +1006,10 @@ void PoolHttpConnection::onBackendQueryUserStats()
   }, offset, size, column, sortDescending);
 }
 
-void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime)
+void PoolHttpConnection::queryStatsHistory(StatisticDb *statistic, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime)
 {
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->queryStatsHistory(login, worker, timeFrom, timeTo, groupByInterval, [this, backend, currentTime](const std::vector<StatisticDb::CStats> &stats) {
+  statistic->queryStatsHistory(login, worker, timeFrom, timeTo, groupByInterval, [this, statistic, currentTime](const std::vector<StatisticDb::CStats> &stats) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -970,8 +1017,8 @@ void PoolHttpConnection::queryStatsHistory(PoolBackend *backend, const std::stri
     {
       JSON::Object object(stream);
       object.addString("status", "ok");
-      object.addString("powerUnit", backend->getCoinInfo().getPowerUnitName());
-      object.addInt("powerMultLog10", backend->getCoinInfo().PowerMultLog10);
+      object.addString("powerUnit", statistic->getCoinInfo().getPowerUnitName());
+      object.addInt("powerMultLog10", statistic->getCoinInfo().PowerMultLog10);
       object.addInt("currentTime", currentTime);
       object.addField("stats");
       {
@@ -1032,13 +1079,13 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
     return;
   }
 
-  PoolBackend *backend = Server_.backend(coin);
-  if (!backend) {
+  StatisticDb *statistic = Server_.statisticDb(coin);
+  if (!statistic) {
     replyWithStatus("invalid_coin");
     return;
   }
 
-  queryStatsHistory(backend, login, "", timeFrom, timeTo, groupByInterval, currentTime);
+  queryStatsHistory(statistic, login, "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
@@ -1079,13 +1126,13 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
     return;
   }
 
-  PoolBackend *backend = Server_.backend(coin);
-  if (!backend) {
+  StatisticDb *statistic = Server_.statisticDb(coin);
+  if (!statistic) {
     replyWithStatus("invalid_coin");
     return;
   }
 
-  queryStatsHistory(backend, login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
+  queryStatsHistory(statistic, login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryCoins()
@@ -1102,6 +1149,7 @@ void PoolHttpConnection::onBackendQueryCoins()
         const CCoinInfo &info = backend->getCoinInfo();
         object.addString("name", info.Name);
         object.addString("fullName", info.FullName);
+        object.addString("algorithm", info.Algorithm);
       }
     }
   }
@@ -1142,7 +1190,7 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
   const CCoinInfo &coinInfo = backend->getCoinInfo();
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->queryFoundBlocks(heightFrom, hashFrom, count, [this, &coinInfo](const std::vector<FoundBlockRecord> &blocks, const std::vector<CNetworkClient::GetBlockConfirmationsQuery> &confirmations) {
+  backend->accountingDb()->queryFoundBlocks(heightFrom, hashFrom, count, [this, &coinInfo](const std::vector<FoundBlockRecord> &blocks, const std::vector<CNetworkClient::GetBlockConfirmationsQuery> &confirmations) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -1256,18 +1304,18 @@ void PoolHttpConnection::onBackendQueryPoolStats()
   }
 
   if (!coin.empty()) {
-    PoolBackend *backend = Server_.backend(coin);
-    if (!backend) {
+  StatisticDb *statistic = Server_.statisticDb(coin);
+    if (!statistic) {
       replyWithStatus("invalid_coin");
       return;
     }
 
     objectIncrementReference(aioObjectHandle(Socket_), 1);
-    backend->queryPoolStats([this, backend](const StatisticDb::CStats &record) {
+    statistic->queryPoolStats([this, statistic](const StatisticDb::CStats &record) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
-      const CCoinInfo &coinInfo = backend->getCoinInfo();
+      const CCoinInfo &coinInfo = statistic->getCoinInfo();
 
       {
         JSON::Object object(stream);
@@ -1280,8 +1328,8 @@ void PoolHttpConnection::onBackendQueryPoolStats()
           {
             JSON::Object statsObject(stream);
             statsObject.addString("coin", coinInfo.Name);
-            statsObject.addString("powerUnit", backend->getCoinInfo().getPowerUnitName());
-            statsObject.addInt("powerMultLog10", backend->getCoinInfo().PowerMultLog10);
+            statsObject.addString("powerUnit", statistic->getCoinInfo().getPowerUnitName());
+            statsObject.addInt("powerMultLog10", statistic->getCoinInfo().PowerMultLog10);
             statsObject.addInt("clients", record.ClientsNum);
             statsObject.addInt("workers", record.WorkersNum);
             statsObject.addDouble("shareRate", record.SharesPerSecond);
@@ -1299,7 +1347,12 @@ void PoolHttpConnection::onBackendQueryPoolStats()
   } else {
     // Ask all backends about stats
     objectIncrementReference(aioObjectHandle(Socket_), 1);
-    PoolBackend::queryPoolStatsMulti(&Server_.backends()[0], Server_.backends().size(), [this](const StatisticDb::CStats *stats, size_t backendsNum) {
+
+    std::vector<StatisticDb*> statisticDbs(Server_.backends().size());
+    for (size_t i = 0, ie = Server_.backends().size(); i != ie; ++i)
+      statisticDbs[i] = Server_.backend(i)->statisticDb();
+
+    StatisticDb::queryPoolStatsMulti(&statisticDbs[0], statisticDbs.size(), [this](const StatisticDb::CStats *stats, size_t backendsNum) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -1360,13 +1413,13 @@ void PoolHttpConnection::onBackendQueryPoolStatsHistory()
     return;
   }
 
-  PoolBackend *backend = Server_.backend(coin);
-  if (!backend) {
+  StatisticDb *statistic = Server_.statisticDb(coin);
+  if (!statistic) {
     replyWithStatus("invalid_coin");
     return;
   }
 
-  queryStatsHistory(backend, "", "", timeFrom, timeTo, groupByInterval, currentTime);
+  queryStatsHistory(statistic, "", "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryProfitSwitchCoeff()
@@ -1454,15 +1507,21 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff()
 PoolHttpServer::PoolHttpServer(uint16_t port,
                                UserManager &userMgr,
                                std::vector<std::unique_ptr<PoolBackend>> &backends,
-                               std::unordered_map<std::string, size_t> &coinIdxMap) :
+                               std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic) :
   Port_(port),
-  UserMgr_(userMgr),
-  CoinIdxMap_(coinIdxMap)
+  UserMgr_(userMgr)
 {
   Base_ = createAsyncBase(amOSDefault);
-  Backends_.resize(backends.size());
-  for (size_t i = 0, ie = backends.size(); i != ie; ++i)
-    Backends_[i] = backends[i].get();
+  for (size_t i = 0, ie = backends.size(); i != ie; ++i) {
+    Backends_.push_back(backends[i].get());
+    Statistic_.push_back(backends[i]->statisticDb());
+  }
+
+  for (size_t  i = 0, ie = algoMetaStatistic.size(); i != ie; ++i)
+    Statistic_.push_back(algoMetaStatistic[i]->statisticDb());
+
+  std::sort(Backends_.begin(), Backends_.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
+  std::sort(Statistic_.begin(), Statistic_.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
 }
 
 bool PoolHttpServer::start()

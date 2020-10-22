@@ -57,7 +57,7 @@ private:
   void onBackendQueryProfitSwitchCoeff();
   void onBackendUpdateProfitSwitchCoeff();
 
-  void queryStatsHistory(PoolBackend *backend, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime);
+  void queryStatsHistory(StatisticDb *statistic, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime);
   void replyWithStatus(const char *status);
 
 private:
@@ -120,7 +120,7 @@ public:
   PoolHttpServer(uint16_t port,
                  UserManager &userMgr,
                  std::vector<std::unique_ptr<PoolBackend>> &backends,
-                 std::unordered_map<std::string, size_t> &coinIdxMap);
+                 std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic);
 
   bool start();
   void stop();
@@ -128,10 +128,23 @@ public:
   UserManager &userManager() { return UserMgr_; }
   PoolBackend *backend(size_t i) { return Backends_[i]; }
   PoolBackend *backend(const std::string &coin) {
-    auto It = CoinIdxMap_.find(coin);
-    return It != CoinIdxMap_.end() ? Backends_[It->second] : nullptr;
+    auto It = std::lower_bound(Backends_.begin(), Backends_.end(), coin, [](const auto &backend, const std::string &name) { return backend->getCoinInfo().Name < name; });
+    if (It == Backends_.end() || (*It)->getCoinInfo().Name != coin)
+      return nullptr;
+
+    return *It;
   }
+
+  StatisticDb *statisticDb(const std::string &name) {
+    auto It = std::lower_bound(Statistic_.begin(), Statistic_.end(), name, [](const auto &statistic, const std::string &name) { return statistic->getCoinInfo().Name < name; });
+    if (It == Statistic_.end() || (*It)->getCoinInfo().Name != name)
+      return nullptr;
+
+    return *It;
+  }
+
   std::vector<PoolBackend*> &backends() { return Backends_; }
+  std::vector<StatisticDb*> &statistics() { return Statistic_; }
 
 private:
   static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);
@@ -143,7 +156,8 @@ private:
   uint16_t Port_;
   UserManager &UserMgr_;
   std::vector<PoolBackend*> Backends_;
-  std::unordered_map<std::string, size_t> CoinIdxMap_;
+  std::vector<StatisticDb*> Statistic_;
+//  std::unordered_map<std::string, size_t> CoinIdxMap_;
 
   std::thread Thread_;
   aioObject *ListenerSocket_;

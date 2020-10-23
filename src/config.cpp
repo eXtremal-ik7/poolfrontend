@@ -171,6 +171,19 @@ void CInstanceConfig::load(rapidjson::Document &document, const rapidjson::Value
   jsonParseString(value, "type", Type, error, localPath, errorDescription);
   jsonParseString(value, "protocol", Protocol, error, localPath, errorDescription);
   jsonParseStringArray(value, "backends", Backends, error, localPath, errorDescription);
+  jsonParseUInt(value, "port", &Port, 0, error, localPath, errorDescription);
+
+  if (Protocol == "stratum") {
+    if (value.HasMember("shareDiff")) {
+      if (value["shareDiff"].IsUint64()) {
+        StratumShareDiff = value["shareDiff"].GetUint64();
+      } else if (value["shareDiff"].IsDouble()) {
+        StratumShareDiff = value["shareDiff"].GetDouble();
+      } else {
+        StratumShareDiff = 0.0;
+      }
+    }
+  }
 }
 
 

@@ -15,6 +15,9 @@ struct CInstanceConfig {
   std::string Type;
   std::string Protocol;
   std::vector<std::string> Backends;
+  unsigned Port;
+  double StratumShareDiff;
+
   rapidjson::Value InstanceConfig;
 
   void load(rapidjson::Document &document, const rapidjson::Value &value, std::string &errorPlace, EErrorType *error);

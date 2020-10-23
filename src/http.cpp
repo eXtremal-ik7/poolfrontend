@@ -35,7 +35,9 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"backendQueryUserStats", {hmPost, fnBackendQueryUserStats}},
   {"backendQueryUserStatsHistory", {hmPost, fnBackendQueryUserStatsHistory}},
   {"backendQueryWorkerStatsHistory", {hmPost, fnBackendQueryWorkerStatsHistory}},
-  {"backendUpdateProfitSwitchCoeff", {hmPost, fnBackendUpdateProfitSwitchCoeff}}
+  {"backendUpdateProfitSwitchCoeff", {hmPost, fnBackendUpdateProfitSwitchCoeff}},
+  // Instance functions
+  {"instanceEnumerateAll", {hmPost, fnInstanceEnumerateAll}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
@@ -228,6 +230,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnBackendQueryPoolStatsHistory : onBackendQueryPoolStatsHistory(); break;
       case fnBackendQueryProfitSwitchCoeff : onBackendQueryProfitSwitchCoeff(); break;
       case fnBackendUpdateProfitSwitchCoeff : onBackendUpdateProfitSwitchCoeff(); break;
+      case fnInstanceEnumerateAll : onInstanceEnumerateAll(); break;
       default:
         reply404();
         return 0;
@@ -1504,12 +1507,47 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff()
   replyWithStatus("ok");
 }
 
+void PoolHttpConnection::onInstanceEnumerateAll()
+{
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+  {
+    JSON::Object result(stream);
+    result.addString("status", "ok");
+    result.addField("instances");
+    {
+      JSON::Array instances(stream);
+      for (const auto &instance: Server_.config().Instances) {
+        instances.addField();
+        JSON::Object instanceObject(stream);
+        instanceObject.addString("protocol", instance.Protocol);
+        instanceObject.addString("type", instance.Type);
+        instanceObject.addInt("port", instance.Port);
+        instanceObject.addField("backends");
+        {
+          JSON::Array backends(stream);
+          for (const auto &backend: instance.Backends)
+            backends.addString(backend);
+        }
+        if (instance.Protocol == "stratum")
+          instanceObject.addDouble("shareDiff", instance.StratumShareDiff);
+      }
+    }
+  }
+
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+}
+
 PoolHttpServer::PoolHttpServer(uint16_t port,
                                UserManager &userMgr,
                                std::vector<std::unique_ptr<PoolBackend>> &backends,
-                               std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic) :
+                               std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic,
+                               const CPoolFrontendConfig &config) :
   Port_(port),
-  UserMgr_(userMgr)
+  UserMgr_(userMgr),
+  Config_(config)
 {
   Base_ = createAsyncBase(amOSDefault);
   for (size_t i = 0, ie = backends.size(); i != ie; ++i) {

@@ -349,7 +349,7 @@ int main(int argc, char *argv[])
     dispatcher->poll();
   }
 
-  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.AlgoMetaStatistic));
+  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.AlgoMetaStatistic, config));
   poolContext.HttpServer->start();
 
   // Start monitor thread

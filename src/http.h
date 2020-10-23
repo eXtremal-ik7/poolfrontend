@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config.h"
 #include "poolcore/backend.h"
 #include <p2putils/HttpRequestParse.h>
 
@@ -57,6 +58,8 @@ private:
   void onBackendQueryProfitSwitchCoeff();
   void onBackendUpdateProfitSwitchCoeff();
 
+  void onInstanceEnumerateAll();
+
   void queryStatsHistory(StatisticDb *statistic, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime);
   void replyWithStatus(const char *status);
 
@@ -92,9 +95,10 @@ private:
     fnBackendQueryPoolStats,
     fnBackendQueryPoolStatsHistory,
     fnBackendQueryProfitSwitchCoeff,
-    fnBackendUpdateProfitSwitchCoeff
+    fnBackendUpdateProfitSwitchCoeff,
 
-    // Statistic functions
+    // Instance functions
+    fnInstanceEnumerateAll
   };
 
   static std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> FunctionNameMap_;
@@ -120,12 +124,14 @@ public:
   PoolHttpServer(uint16_t port,
                  UserManager &userMgr,
                  std::vector<std::unique_ptr<PoolBackend>> &backends,
-                 std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic);
+                 std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic,
+                 const CPoolFrontendConfig &config);
 
   bool start();
   void stop();
 
   UserManager &userManager() { return UserMgr_; }
+  const CPoolFrontendConfig &config() { return Config_; }
   PoolBackend *backend(size_t i) { return Backends_[i]; }
   PoolBackend *backend(const std::string &coin) {
     auto It = std::lower_bound(Backends_.begin(), Backends_.end(), coin, [](const auto &backend, const std::string &name) { return backend->getCoinInfo().Name < name; });
@@ -155,9 +161,9 @@ private:
   asyncBase *Base_;
   uint16_t Port_;
   UserManager &UserMgr_;
+  const CPoolFrontendConfig &Config_;
   std::vector<PoolBackend*> Backends_;
   std::vector<StatisticDb*> Statistic_;
-//  std::unordered_map<std::string, size_t> CoinIdxMap_;
 
   std::thread Thread_;
   aioObject *ListenerSocket_;

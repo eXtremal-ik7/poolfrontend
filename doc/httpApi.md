@@ -26,7 +26,9 @@
    * [backendQueryWorkerStatsHistory](#backendqueryworkerstatshistory)
    * [backendQueryProfitSwitchCoeff](#backendqueryprofitswitchcoeff)
    * [backendUpdateProfitSwitchCoeff](#backendupdateprofitswitchcoeff)
-
+* [Other API functions](#backend-api-functions)
+   * [instanceEnumerateAll](#instanceenumerateall)
+   
 # Common status values suitable for all operations
 
 * ok: operation success
@@ -868,4 +870,51 @@ curl -X POST -d '{"id": "bfb3a5e00e52ed152497dd487c7c70571a067ec3c8bc8f4b8c2f17f
 ### response exapmle:
 ```
 {"status": "ok"}
+```
+
+## instanceEnumerateAll
+Function returns information about all instances (stratum/other ports, configuration)
+
+### arguments:
+none
+
+### return values:
+* status:string - "ok"
+* instances:array - array of objects with these fields:
+  * protocol:string - usual 'stratum'
+  * type:string - protocol implementation, usual a coin name
+  * port:integer
+  * backends:[string] - array of available backends for mining using this instance
+  * shareDiff:float - only for BTC-like stratum instances, minimal share difficulty
+  
+### curl example:
+```
+curl -X POST -d '{}' http://localhost:18880/api/instanceEnumerateAll
+```
+
+### response exapmle:
+```
+{
+   "status":"ok",
+   "instances":[
+      {
+         "protocol":"stratum",
+         "type":"BTC",
+         "port":3456,
+         "backends":[
+            "BTC"
+         ],
+         "shareDiff":32768.000000
+      },
+      {
+         "protocol":"stratum",
+         "type":"LTC",
+         "port":3460,
+         "backends":[
+            "LTC.testnet"
+         ],
+         "shareDiff":0.000010
+      }
+   ]
+}
 ```

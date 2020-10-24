@@ -32,7 +32,8 @@
 # Common status values suitable for all operations
 
 * ok: operation success
-* json_format_error: request is not correct json or argument type mismatch
+* invalid_json: request is not correct json
+* json_format_error: missed argument or argument type mismatch
 * request_format_error: invalid function arguments passed
 
 # User management
@@ -82,10 +83,13 @@ Register new user and send email with activation link if parameter <poolfrontend
 Pool frontend must have a handler for configured activation link fornat.
 
 ### arguments:
-* login:string - Unique user identifier (up to 64 characters)
-* password:string - Password (8-64 characters length)
-* email:string - User email
-* name:string - User name (display instead of login in 'blocks found by pool' table (up to 256 characters)
+* [required] login:string - Unique user identifier (up to 64 characters)
+* [required] password:string - Password (8-64 characters length)
+* [optional] email:string - User email, can be omitted, if isActive=true
+* [required] name:string - User name (display instead of login in 'blocks found by pool' table (up to 256 characters)
+* [optional] isActive:boolean - if true, function will create activated user (option available for admin account only)
+* [optional] isReadOnly:boolean - if true, user will have no write access to his account (option available for admin account only)
+* [optional] id:string - unique user session id returned by userlogin function, only admin session is usable
 
 ### return values:
 * status:string - can be one of common status values or:
@@ -100,7 +104,8 @@ Pool frontend must have a handler for configured activation link fornat.
 
 ### curl example:
 ```
-curl -X POST -d "{\"login\": \"user\", \"password\": \"12345678\", \"email\": \"my@email.com\"}" http://localhost:18880/api/userCreate
+curl -X POST -d '{"login": "user", "password": "12345678", "email": "my@email.com"}' http://localhost:18880/api/userCreate
+curl -X POST -d '{"login": "ro", "password": "12345678", "isActive": true, "isReadOnly": true, "id": "aa342d65135cfb6485c8ca52bacd774418fd1a76fbce5a418ae607a4471c9de0a52e46f36d2b5d1645f83598e34fed7e2750772080122fdaf92becf5e60ed058"}' http://localhost:18880/api/userCreate
 ```
 
 ### response examples:

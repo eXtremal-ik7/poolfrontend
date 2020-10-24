@@ -96,33 +96,49 @@ static inline void jsonParseString(rapidjson::Document &document, const char *na
 }
 
 static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, const std::string &defaultValue, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsString())
-    out = document[name].GetString();
-  else
+  if (document.HasMember(name)) {
+    if (document[name].IsString())
+      out = document[name].GetString();
+    else
+      *validAcc = false;
+  } else {
     out = defaultValue;
+  }
 }
 
 
 static inline void jsonParseInt64(rapidjson::Document &document, const char *name, int64_t *out, int64_t defaultValue, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsInt64())
-    *out = document[name].GetInt64();
-  else
+  if (document.HasMember(name)) {
+    if (document[name].IsInt64())
+      *out = document[name].GetInt64();
+    else
+      *validAcc = false;
+  } else {
     *out = defaultValue;
+  }
 }
 
 
 static inline void jsonParseUInt64(rapidjson::Document &document, const char *name, uint64_t *out, int64_t defaultValue, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsUint64())
-    *out = document[name].GetUint64();
-  else
+  if (document.HasMember(name)) {
+    if (document[name].IsUint64())
+      *out = document[name].IsUint64();
+    else
+      *validAcc = false;
+  } else {
     *out = defaultValue;
+  }
 }
 
 static inline void jsonParseUInt(rapidjson::Document &document, const char *name, unsigned *out, unsigned defaultValue, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsUint())
-    *out = document[name].GetUint();
-  else
+  if (document.HasMember(name)) {
+    if (document[name].IsUint())
+      *out = document[name].IsUint();
+    else
+      *validAcc = false;
+  } else {
     *out = defaultValue;
+  }
 }
 
 static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool *validAcc) {
@@ -133,10 +149,14 @@ static inline void jsonParseBoolean(rapidjson::Document &document, const char *n
 }
 
 static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool defaultValue, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsBool())
-    *out = document[name].GetBool();
-  else
+  if (document.HasMember(name)) {
+    if (document[name].IsBool())
+      *out = document[name].GetBool();
+    else
+      *validAcc = false;
+  } else {
     *out = defaultValue;
+  }
 }
 
 static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
@@ -146,25 +166,12 @@ static inline void jsonParseDouble(rapidjson::Document &document, const char *na
     *validAcc = false;
 }
 
-static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, bool defaultValue, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsDouble())
-    *out = document[name].GetDouble();
-  else
-    *out = defaultValue;
-}
-
-static inline bool parseUserCredentials(const char *json, UserManager::Credentials &credentials)
+static inline void parseUserCredentials(rapidjson::Document &document, UserManager::Credentials &credentials, bool *validAcc)
 {
-  bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(json);
-  if (document.HasParseError())
-    return false;
-  jsonParseString(document, "login", credentials.Login, "", &validAcc);
-  jsonParseString(document, "password", credentials.Password, "", &validAcc);
-  jsonParseString(document, "name", credentials.Name, "", &validAcc);
-  jsonParseString(document, "email", credentials.EMail, "", &validAcc);
-  return validAcc;
+  jsonParseString(document, "login", credentials.Login, "", validAcc);
+  jsonParseString(document, "password", credentials.Password, "", validAcc);
+  jsonParseString(document, "name", credentials.Name, "", validAcc);
+  jsonParseString(document, "email", credentials.EMail, "", validAcc);
 }
 
 void PoolHttpConnection::run()
@@ -203,34 +210,43 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
     return 1;
   } else if (component->type == httpRequestDtDataLast) {
     Context.Request.append(component->data.data, component->data.data + component->data.size);
+    rapidjson::Document document;
+    if (!Context.Request.empty()) {
+      document.Parse(Context.Request.c_str());
+      if (document.HasParseError()) {
+        replyWithStatus("invalid_json");
+        return 1;
+      }
+    }
+
     switch (Context.function) {
-      case fnUserAction: onUserAction(); break;
-      case fnUserCreate: onUserCreate(); break;
-      case fnUserResendEmail: onUserResendEmail(); break;
-      case fnUserLogin: onUserLogin(); break;
-      case fnUserLogout: onUserLogout(); break;
-      case fnUserChangeEmail: onUserChangeEmail(); break;
-      case fnUserChangePassword: onUserChangePassword(); break;
-    case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(); break;
-      case fnUserGetCredentials: onUserGetCredentials(); break;
-      case fnUserGetSettings: onUserGetSettings(); break;
-      case fnUserUpdateCredentials: onUserUpdateCredentials(); break;
-      case fnUserUpdateSettings: onUserUpdateSettings(); break;
-      case fnUserEnumerateAll: onUserEnumerateAll(); break;
-      case fnBackendManualPayout: onBackendManualPayout(); break;
-      case fnBackendQueryUserBalance: onBackendQueryUserBalance(); break;
-      case fnBackendQueryUserStats: onBackendQueryUserStats(); break;
-      case fnBackendQueryUserStatsHistory: onBackendQueryUserStatsHistory(); break;
-      case fnBackendQueryWorkerStatsHistory: onBackendQueryWorkerStatsHistory(); break;
-      case fnBackendQueryCoins : onBackendQueryCoins(); break;
-      case fnBackendQueryFoundBlocks: onBackendQueryFoundBlocks(); break;
-      case fnBackendQueryPayouts: onBackendQueryPayouts(); break;
-      case fnBackendQueryPoolBalance: onBackendQueryPoolBalance(); break;
-      case fnBackendQueryPoolStats: onBackendQueryPoolStats(); break;
-      case fnBackendQueryPoolStatsHistory : onBackendQueryPoolStatsHistory(); break;
-      case fnBackendQueryProfitSwitchCoeff : onBackendQueryProfitSwitchCoeff(); break;
-      case fnBackendUpdateProfitSwitchCoeff : onBackendUpdateProfitSwitchCoeff(); break;
-      case fnInstanceEnumerateAll : onInstanceEnumerateAll(); break;
+      case fnUserAction: onUserAction(document); break;
+      case fnUserCreate: onUserCreate(document); break;
+      case fnUserResendEmail: onUserResendEmail(document); break;
+      case fnUserLogin: onUserLogin(document); break;
+      case fnUserLogout: onUserLogout(document); break;
+      case fnUserChangeEmail: onUserChangeEmail(document); break;
+      case fnUserChangePassword: onUserChangePassword(document); break;
+    case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(document); break;
+      case fnUserGetCredentials: onUserGetCredentials(document); break;
+      case fnUserGetSettings: onUserGetSettings(document); break;
+      case fnUserUpdateCredentials: onUserUpdateCredentials(document); break;
+      case fnUserUpdateSettings: onUserUpdateSettings(document); break;
+      case fnUserEnumerateAll: onUserEnumerateAll(document); break;
+      case fnBackendManualPayout: onBackendManualPayout(document); break;
+      case fnBackendQueryUserBalance: onBackendQueryUserBalance(document); break;
+      case fnBackendQueryUserStats: onBackendQueryUserStats(document); break;
+      case fnBackendQueryUserStatsHistory: onBackendQueryUserStatsHistory(document); break;
+      case fnBackendQueryWorkerStatsHistory: onBackendQueryWorkerStatsHistory(document); break;
+      case fnBackendQueryCoins : onBackendQueryCoins(document); break;
+      case fnBackendQueryFoundBlocks: onBackendQueryFoundBlocks(document); break;
+      case fnBackendQueryPayouts: onBackendQueryPayouts(document); break;
+      case fnBackendQueryPoolBalance: onBackendQueryPoolBalance(document); break;
+      case fnBackendQueryPoolStats: onBackendQueryPoolStats(document); break;
+      case fnBackendQueryPoolStatsHistory : onBackendQueryPoolStatsHistory(document); break;
+      case fnBackendQueryProfitSwitchCoeff : onBackendQueryProfitSwitchCoeff(document); break;
+      case fnBackendUpdateProfitSwitchCoeff : onBackendUpdateProfitSwitchCoeff(document); break;
+      case fnInstanceEnumerateAll : onInstanceEnumerateAll(document); break;
       default:
         reply404();
         return 0;
@@ -327,17 +343,10 @@ void PoolHttpConnection::close()
     deleteAioObject(Socket_);
 }
 
-void PoolHttpConnection::onUserAction()
+void PoolHttpConnection::onUserAction(rapidjson::Document &document)
 {
   std::string actionId;
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   jsonParseString(document, "id", actionId, &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -351,11 +360,34 @@ void PoolHttpConnection::onUserAction()
   });
 }
 
-void PoolHttpConnection::onUserCreate()
+void PoolHttpConnection::onUserCreate(rapidjson::Document &document)
 {
+  bool validAcc = true;
+  std::string sessionId;
+  bool isActivated;
+  bool isReadOnly;
   UserManager::Credentials credentials;
-  if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
+
+  jsonParseString(document, "id", sessionId, "", &validAcc);
+  jsonParseBoolean(document, "isActive", &isActivated, false, &validAcc);
+  jsonParseBoolean(document, "isReadOnly", &isReadOnly, false, &validAcc);
+  parseUserCredentials(document, credentials, &validAcc);
+
+  if (!validAcc) {
     replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string login;
+  if (!sessionId.empty()) {
+    if (!Server_.userManager().validateSession(sessionId, "", login, false)) {
+      replyWithStatus("unknown_id");
+      return;
+    }
+  }
+
+  if ((isActivated || isReadOnly) && login != "admin") {
+    replyWithStatus("unknown_id");
     return;
   }
 
@@ -363,13 +395,16 @@ void PoolHttpConnection::onUserCreate()
   Server_.userManager().userCreate(std::move(credentials), [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
-  });
+  }, isActivated, isReadOnly);
 }
 
-void PoolHttpConnection::onUserResendEmail()
+void PoolHttpConnection::onUserResendEmail(rapidjson::Document &document)
 {
+  bool validAcc = true;
   UserManager::Credentials credentials;
-  if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
+  parseUserCredentials(document, credentials, &validAcc);
+
+  if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
   }
@@ -381,10 +416,13 @@ void PoolHttpConnection::onUserResendEmail()
   });
 }
 
-void PoolHttpConnection::onUserLogin()
+void PoolHttpConnection::onUserLogin(rapidjson::Document &document)
 {
+  bool validAcc = true;
   UserManager::Credentials credentials;
-  if (!parseUserCredentials(Context.Request.c_str(), credentials)) {
+  parseUserCredentials(document, credentials, &validAcc);
+
+  if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
   }
@@ -406,17 +444,10 @@ void PoolHttpConnection::onUserLogin()
   });
 }
 
-void PoolHttpConnection::onUserLogout()
+void PoolHttpConnection::onUserLogout(rapidjson::Document &document)
 {
-  std::string sessionId;
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
+  std::string sessionId;
   jsonParseString(document, "id", sessionId, &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
@@ -430,7 +461,7 @@ void PoolHttpConnection::onUserLogout()
   });
 }
 
-void PoolHttpConnection::onUserChangeEmail()
+void PoolHttpConnection::onUserChangeEmail(rapidjson::Document&)
 {
   xmstream stream;
   reply200(stream);
@@ -440,16 +471,9 @@ void PoolHttpConnection::onUserChangeEmail()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onUserChangePassword()
+void PoolHttpConnection::onUserChangePassword(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string actionId;
   std::string newPassword;
   jsonParseString(document, "id", actionId, &validAcc);
@@ -466,16 +490,9 @@ void PoolHttpConnection::onUserChangePassword()
   });
 }
 
-void PoolHttpConnection::onUserChangePasswordInitiate()
+void PoolHttpConnection::onUserChangePasswordInitiate(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string login;
   jsonParseString(document, "login", login, &validAcc);
   if (!validAcc) {
@@ -490,18 +507,11 @@ void PoolHttpConnection::onUserChangePasswordInitiate()
   });
 }
 
-void PoolHttpConnection::onUserGetCredentials()
+void PoolHttpConnection::onUserGetCredentials(rapidjson::Document &document)
 {
+  bool validAcc = true;
   std::string sessionId;
   std::string targetLogin;
-  bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   if (!validAcc) {
@@ -534,18 +544,11 @@ void PoolHttpConnection::onUserGetCredentials()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onUserGetSettings()
+void PoolHttpConnection::onUserGetSettings(rapidjson::Document &document)
 {
+  bool validAcc = true;
   std::string sessionId;
   std::string targetLogin;
-  bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   if (!validAcc) {
@@ -591,7 +594,7 @@ void PoolHttpConnection::onUserGetSettings()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onUserUpdateCredentials()
+void PoolHttpConnection::onUserUpdateCredentials(rapidjson::Document&)
 {
   xmstream stream;
   reply200(stream);
@@ -601,20 +604,12 @@ void PoolHttpConnection::onUserUpdateCredentials()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onUserUpdateSettings()
+void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)
 {
+  bool validAcc = true;
   std::string sessionId;
   std::string targetLogin;
   UserSettingsRecord settings;
-
-  bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string payoutThreshold;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
@@ -656,21 +651,15 @@ void PoolHttpConnection::onUserUpdateSettings()
   });
 }
 
-void PoolHttpConnection::onUserEnumerateAll()
+void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
 {
+  bool validAcc = true;
   std::string sessionId;
   std::string coin;
   uint64_t offset;
   uint64_t size;
   std::string sortBy;
   bool sortDescending;
-  bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
 
   jsonParseString(document, "id", sessionId, &validAcc);
   // TODO: remove sha256
@@ -752,16 +741,9 @@ void PoolHttpConnection::onUserEnumerateAll()
   });
 }
 
-void PoolHttpConnection::onBackendManualPayout()
+void PoolHttpConnection::onBackendManualPayout(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
@@ -803,16 +785,9 @@ void PoolHttpConnection::onBackendManualPayout()
   });
 }
 
-void PoolHttpConnection::onBackendQueryUserBalance()
+void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
@@ -905,16 +880,9 @@ void PoolHttpConnection::onBackendQueryUserBalance()
   }
 }
 
-void PoolHttpConnection::onBackendQueryUserStats()
+void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
@@ -1046,16 +1014,9 @@ void PoolHttpConnection::queryStatsHistory(StatisticDb *statistic, const std::st
   });
 }
 
-void PoolHttpConnection::onBackendQueryUserStatsHistory()
+void PoolHttpConnection::onBackendQueryUserStatsHistory(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   int64_t currentTime = time(nullptr);
   std::string sessionId;
   std::string targetLogin;
@@ -1091,16 +1052,9 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory()
   queryStatsHistory(statistic, login, "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
-void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
+void PoolHttpConnection::onBackendQueryWorkerStatsHistory(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   int64_t currentTime = time(nullptr);
   std::string sessionId;
   std::string targetLogin;
@@ -1138,7 +1092,7 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory()
   queryStatsHistory(statistic, login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
 }
 
-void PoolHttpConnection::onBackendQueryCoins()
+void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
 {
   xmstream stream;
   reply200(stream);
@@ -1161,20 +1115,13 @@ void PoolHttpConnection::onBackendQueryCoins()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onBackendQueryFoundBlocks()
+void PoolHttpConnection::onBackendQueryFoundBlocks(rapidjson::Document &document)
 {
   bool validAcc = true;
   std::string coin;
   int64_t heightFrom;
   std::string hashFrom;
   uint32_t count;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   jsonParseString(document, "coin", coin, &validAcc);
   jsonParseInt64(document, "heightFrom", &heightFrom, -1, &validAcc);
   jsonParseString(document, "hashFrom", hashFrom, "", &validAcc);
@@ -1219,16 +1166,9 @@ void PoolHttpConnection::onBackendQueryFoundBlocks()
   });
 }
 
-void PoolHttpConnection::onBackendQueryPayouts()
+void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
@@ -1279,7 +1219,7 @@ void PoolHttpConnection::onBackendQueryPayouts()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onBackendQueryPoolBalance()
+void PoolHttpConnection::onBackendQueryPoolBalance(rapidjson::Document&)
 {
   xmstream stream;
   reply200(stream);
@@ -1289,16 +1229,9 @@ void PoolHttpConnection::onBackendQueryPoolBalance()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onBackendQueryPoolStats()
+void PoolHttpConnection::onBackendQueryPoolStats(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string coin;
   jsonParseString(document, "coin", coin, "", &validAcc);
   if (!validAcc) {
@@ -1391,16 +1324,9 @@ void PoolHttpConnection::onBackendQueryPoolStats()
   }
 }
 
-void PoolHttpConnection::onBackendQueryPoolStatsHistory()
+void PoolHttpConnection::onBackendQueryPoolStatsHistory(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   int64_t currentTime = time(nullptr);
   std::string coin;
   int64_t timeFrom;
@@ -1425,16 +1351,9 @@ void PoolHttpConnection::onBackendQueryPoolStatsHistory()
   queryStatsHistory(statistic, "", "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
-void PoolHttpConnection::onBackendQueryProfitSwitchCoeff()
+void PoolHttpConnection::onBackendQueryProfitSwitchCoeff(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string sessionId;
   jsonParseString(document, "id", sessionId, &validAcc);
 
@@ -1469,16 +1388,9 @@ void PoolHttpConnection::onBackendQueryProfitSwitchCoeff()
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff()
+void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff(rapidjson::Document &document)
 {
   bool validAcc = true;
-  rapidjson::Document document;
-  document.Parse(Context.Request.c_str());
-  if (document.HasParseError()) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
   std::string sessionId;
   std::string coin;
   double profitSwitchCoeff = 0.0;
@@ -1507,7 +1419,7 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff()
   replyWithStatus("ok");
 }
 
-void PoolHttpConnection::onInstanceEnumerateAll()
+void PoolHttpConnection::onInstanceEnumerateAll(rapidjson::Document&)
 {
   xmstream stream;
   reply200(stream);

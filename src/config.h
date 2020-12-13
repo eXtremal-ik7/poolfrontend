@@ -35,7 +35,7 @@ struct CNodeConfig {
 
 struct CFeeConfig {
   std::string Address;
-  float Percentage;
+  double Percentage;
 
   void load(const rapidjson::Value &value, const std::string &path, std::string &errorDescription, EErrorType *error);
 };
@@ -47,7 +47,8 @@ struct CMiningAddressConfig {
 
 struct CCoinConfig {
   std::string Name;
-  std::vector<CNodeConfig> Nodes;
+  std::vector<CNodeConfig> GetWorkNodes;
+  std::vector<CNodeConfig> RPCNodes;
   std::vector<CFeeConfig> Fees;
   unsigned RequiredConfirmations;
   std::string DefaultPayoutThreshold;
@@ -75,6 +76,7 @@ struct CPoolFrontendConfig {
   std::string ObserverPasswordHash;
   std::string DbPath;
   std::string PoolName;
+  std::string PoolHostProtocol;
   std::string PoolHostAddress;
   std::string PoolActivateLinkPrefix;
   std::string PoolChangePasswordLinkPrefix;

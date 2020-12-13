@@ -176,7 +176,7 @@ void CInstanceConfig::load(rapidjson::Document &document, const rapidjson::Value
   if (Protocol == "stratum") {
     if (value.HasMember("shareDiff")) {
       if (value["shareDiff"].IsUint64()) {
-        StratumShareDiff = value["shareDiff"].GetUint64();
+        StratumShareDiff = static_cast<double>(value["shareDiff"].GetUint64());
       } else if (value["shareDiff"].IsDouble()) {
         StratumShareDiff = value["shareDiff"].GetDouble();
       } else {
@@ -201,7 +201,7 @@ void CFeeConfig::load(const rapidjson::Value &value, const std::string &path, st
 {
   std::string localPath = path + " -> fees";
   jsonParseString(value, "address", Address, error, localPath, errorDescription);
-  jsonParseFloat(value, "percentage", &Percentage, error, localPath, errorDescription);
+  jsonParseDouble(value, "percentage", &Percentage, error, localPath, errorDescription);
 }
 
 void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescription, EErrorType *error)
@@ -210,20 +210,35 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
 
   // Parse nodes
   std::string localPath = (std::string)"coins" + " -> " + Name;
-  if (!value.HasMember("nodes")) {
-    setErrorDescription(ENotExists, error, localPath, "nodes", "array of objects", errorDescription);
+  if (!value.HasMember("getWorkNodes")) {
+    setErrorDescription(ENotExists, error, localPath, "getWorkNodes", "array of objects", errorDescription);
     return;
   }
-  if (!value["nodes"].IsArray()) {
-    setErrorDescription(ETypeMismatch, error, localPath, "nodes", "array of objects", errorDescription);
+  if (!value["getWorkNodes"].IsArray()) {
+    setErrorDescription(ETypeMismatch, error, localPath, "getWorkNodes", "array of objects", errorDescription);
+    return;
+  }
+  if (!value.HasMember("RPCNodes")) {
+    setErrorDescription(ENotExists, error, localPath, "RPCNodes", "array of objects", errorDescription);
+    return;
+  }
+  if (!value["RPCNodes"].IsArray()) {
+    setErrorDescription(ETypeMismatch, error, localPath, "RPCNodes", "array of objects", errorDescription);
     return;
   }
 
   {
-    auto array = value["nodes"].GetArray();
-    Nodes.resize(array.Size());
+    auto array = value["getWorkNodes"].GetArray();
+    GetWorkNodes.resize(array.Size());
     for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i)
-      Nodes[i].load(array[i], localPath, errorDescription, error);
+      GetWorkNodes[i].load(array[i], localPath, errorDescription, error);
+  }
+
+  {
+    auto array = value["RPCNodes"].GetArray();
+    RPCNodes.resize(array.Size());
+    for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i)
+      RPCNodes[i].load(array[i], localPath, errorDescription, error);
   }
 
   // Parse fees
@@ -297,6 +312,7 @@ bool CPoolFrontendConfig::load(rapidjson::Document &document, std::string &error
     jsonParseString(object, "observerPasswordHash", ObserverPasswordHash, "", &error, localPath, errorDescription);
     jsonParseString(object, "dbPath", DbPath, &error, localPath, errorDescription);
     jsonParseString(object, "poolName", PoolName, &error, localPath, errorDescription);
+    jsonParseString(object, "poolHostProtocol", PoolHostProtocol, &error, localPath, errorDescription);
     jsonParseString(object, "poolHostAddress", PoolHostAddress, &error, localPath, errorDescription);
     jsonParseString(object, "poolActivateLinkPrefix", PoolActivateLinkPrefix, &error, localPath, errorDescription);
     jsonParseString(object, "poolChangePasswordLinkPrefix", PoolChangePasswordLinkPrefix, &error, localPath, errorDescription);

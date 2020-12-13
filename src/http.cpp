@@ -16,6 +16,7 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userLogout", {hmPost, fnUserLogout}},
   {"userChangeEmail", {hmPost, fnUserChangeEmail}},
   {"userChangePassword", {hmPost, fnUserChangePassword}},
+  {"userChangePasswordForce", {hmPost, fnUserChangePasswordForce}},
   {"userChangePasswordInitiate", {hmPost, fnUserChangePasswordInitiate}},
   {"userGetCredentials", {hmPost, fnUserGetCredentials}},
   {"userGetSettings", {hmPost, fnUserGetSettings}},
@@ -122,7 +123,7 @@ static inline void jsonParseInt64(rapidjson::Document &document, const char *nam
 static inline void jsonParseUInt64(rapidjson::Document &document, const char *name, uint64_t *out, int64_t defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsUint64())
-      *out = document[name].IsUint64();
+      *out = document[name].GetUint64();
     else
       *validAcc = false;
   } else {
@@ -133,7 +134,7 @@ static inline void jsonParseUInt64(rapidjson::Document &document, const char *na
 static inline void jsonParseUInt(rapidjson::Document &document, const char *name, unsigned *out, unsigned defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsUint())
-      *out = document[name].IsUint();
+      *out = document[name].GetUint();
     else
       *validAcc = false;
   } else {
@@ -164,6 +165,19 @@ static inline void jsonParseDouble(rapidjson::Document &document, const char *na
     *out = document[name].GetDouble();
   else
     *validAcc = false;
+}
+
+static inline void jsonParseIntOrDouble(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsDouble())
+      *out = document[name].GetDouble();
+    else if (document[name].IsInt64())
+      *out = document[name].GetInt64();
+    else
+      *validAcc = false;
+  } else {
+    *validAcc = false;
+  }
 }
 
 static inline void parseUserCredentials(rapidjson::Document &document, UserManager::Credentials &credentials, bool *validAcc)
@@ -211,12 +225,10 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
   } else if (component->type == httpRequestDtDataLast) {
     Context.Request.append(component->data.data, component->data.data + component->data.size);
     rapidjson::Document document;
-    if (!Context.Request.empty()) {
-      document.Parse(Context.Request.c_str());
-      if (document.HasParseError()) {
-        replyWithStatus("invalid_json");
-        return 1;
-      }
+    document.Parse(!Context.Request.empty() ? Context.Request.c_str() : "{}");
+    if (document.HasParseError() || !document.IsObject()) {
+      replyWithStatus("invalid_json");
+      return 1;
     }
 
     switch (Context.function) {
@@ -227,7 +239,8 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserLogout: onUserLogout(document); break;
       case fnUserChangeEmail: onUserChangeEmail(document); break;
       case fnUserChangePassword: onUserChangePassword(document); break;
-    case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(document); break;
+      case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(document); break;
+      case fnUserChangePasswordForce: onUserChangePasswordForce(document); break;
       case fnUserGetCredentials: onUserGetCredentials(document); break;
       case fnUserGetSettings: onUserGetSettings(document); break;
       case fnUserUpdateCredentials: onUserUpdateCredentials(document); break;
@@ -428,15 +441,17 @@ void PoolHttpConnection::onUserLogin(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userLogin(std::move(credentials), [this](const std::string &sessionId, const char *status) {
+  Server_.userManager().userLogin(std::move(credentials), [this](const std::string &sessionId, const char *status, bool isReadOnly) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
 
-    stream.write('{');
-    jsonSerializeString(stream, "sessionid", sessionId.c_str());
-    jsonSerializeString(stream, "status", status, true);
-    stream.write("}\n");
+    {
+      JSON::Object result(stream);
+      result.addString("status", status);
+      result.addString("sessionid", sessionId);
+      result.addBoolean("isReadOnly", isReadOnly);
+    }
 
     finishChunk(stream, offset);
     aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
@@ -507,6 +522,27 @@ void PoolHttpConnection::onUserChangePasswordInitiate(rapidjson::Document &docum
   });
 }
 
+void PoolHttpConnection::onUserChangePasswordForce(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string id;
+  std::string login;
+  std::string newPassword;
+  jsonParseString(document, "id", id, &validAcc);
+  jsonParseString(document, "login", login, &validAcc);
+  jsonParseString(document, "newPassword", newPassword, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userChangePasswordForce(id, login, newPassword, [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
 void PoolHttpConnection::onUserGetCredentials(rapidjson::Document &document)
 {
   bool validAcc = true;
@@ -522,24 +558,27 @@ void PoolHttpConnection::onUserGetCredentials(rapidjson::Document &document)
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write('{');
 
   std::string login;
   UserManager::Credentials credentials;
   if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+    JSON::Object result(stream);
     if (Server_.userManager().getUserCredentials(login, credentials)) {
-      jsonSerializeString(stream, "status", "ok");
-      jsonSerializeString(stream, "name", credentials.Name.c_str());
-      jsonSerializeString(stream, "email", credentials.EMail.c_str());
-      jsonSerializeInt(stream, "registrationDate", credentials.RegistrationDate, true);
+      result.addString("status", "ok");
+      result.addString("login", login);
+      result.addString("name", credentials.Name);
+      result.addString("email", credentials.EMail);
+      result.addInt("registrationDate", credentials.RegistrationDate);
+      result.addBoolean("isActive", credentials.IsActive);
+      result.addBoolean("isReadOnly", credentials.IsReadOnly);
     } else {
-      jsonSerializeString(stream, "status", "unknown_id", true);
+      result.addString("status", "unknown_id");
     }
   } else {
-    jsonSerializeString(stream, "status", "unknown_id", true);
+    JSON::Object result(stream);
+    result.addString("status", "unknown_id");
   }
 
-  stream.write("}\n");
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
@@ -724,6 +763,8 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
               userObject.addString("name", user.Name);
               userObject.addString("email", user.EMail);
               userObject.addInt("registrationDate", user.RegistrationDate);
+              userObject.addBoolean("isActive", user.IsActive);
+              userObject.addBoolean("isReadOnly", user.IsReadOnly);
               userObject.addInt("workers", user.WorkersNum);
               userObject.addDouble("shareRate", user.SharesPerSecond);
               userObject.addInt("power", user.AveragePower);
@@ -1098,9 +1139,12 @@ void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
   reply200(stream);
   size_t offset = startChunk(stream);
   {
-    JSON::Array result(stream);
+    JSON::Object result(stream);
+    result.addString("status", "ok");
+    result.addField("coins");
+    JSON::Array coins(stream);
     for (const auto &backend: Server_.backends()) {
-      result.addField();
+      coins.addField();
       {
         JSON::Object object(stream);
         const CCoinInfo &info = backend->getCoinInfo();
@@ -1209,9 +1253,9 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
     if (i != 0)
       stream.write(',');
     stream.write('{');
-    jsonSerializeInt(stream, "time", records[i].time);
-    jsonSerializeString(stream, "txid", records[i].transactionId.c_str());
-    jsonSerializeString(stream, "value", FormatMoney(records[i].value, backend->getCoinInfo().RationalPartSize).c_str(), true);
+    jsonSerializeInt(stream, "time", records[i].Time);
+    jsonSerializeString(stream, "txid", records[i].TransactionId.c_str());
+    jsonSerializeString(stream, "value", FormatMoney(records[i].Value, backend->getCoinInfo().RationalPartSize).c_str(), true);
     stream.write('}');
   }
   stream.write("]}");
@@ -1372,14 +1416,19 @@ void PoolHttpConnection::onBackendQueryProfitSwitchCoeff(rapidjson::Document &do
   reply200(stream);
   size_t offset = startChunk(stream);
   {
-    JSON::Array result(stream);
-    for (const auto &backend: Server_.backends()) {
-      result.addField();
-      {
-        JSON::Object object(stream);
-        const CCoinInfo &info = backend->getCoinInfo();
-        object.addString("name", info.Name);
-        object.addDouble("profitSwitchCoeff", backend->getProfitSwitchCoeff());
+    JSON::Object result(stream);
+    result.addString("status", "ok");
+    result.addField("coins");
+    {
+      JSON::Array coins(stream);
+      for (const auto &backend: Server_.backends()) {
+        coins.addField();
+        {
+          JSON::Object object(stream);
+          const CCoinInfo &info = backend->getCoinInfo();
+          object.addString("name", info.Name);
+          object.addDouble("profitSwitchCoeff", backend->getProfitSwitchCoeff());
+        }
       }
     }
   }
@@ -1396,7 +1445,7 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff(rapidjson::Document &d
   double profitSwitchCoeff = 0.0;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
-  jsonParseDouble(document, "profitSwitchCoeff", &profitSwitchCoeff, &validAcc);
+  jsonParseIntOrDouble(document, "profitSwitchCoeff", &profitSwitchCoeff, &validAcc);
 
   if (!validAcc) {
     replyWithStatus("json_format_error");

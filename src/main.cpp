@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
     totalThreadsNum =
       1 +                   // Monitor (listeners and clients polling)
       workerThreadsNum +    // Share checkers
-      backendsNum +         // Backends
+      backendsNum*2 +       // Backends & metastatistic algorithm servers
       1;                    // HTTP server
     LOG_F(INFO, "Worker threads: %u; total pool threads: %u", workerThreadsNum, totalThreadsNum);
 
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
     poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
 
     // Base config
-    poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostAddress, config.PoolActivateLinkPrefix, config.PoolChangePasswordLinkPrefix);
+    poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostProtocol, config.PoolHostAddress, config.PoolActivateLinkPrefix, config.PoolChangePasswordLinkPrefix);
     // Admin & observer passwords
     if (!config.AdminPasswordHash.empty())
       poolContext.UserMgr->addSpecialUser(UserManager::ESpecialUserAdmin, config.AdminPasswordHash);
@@ -215,6 +215,7 @@ int main(int argc, char *argv[])
         backendConfig.CoinBaseMsg = config.PoolName;
 
       backendConfig.PoolFee.resize(coinConfig.Fees.size());
+      double feePercentageSum = 0.0;
       for (size_t feeIdx = 0, feeIdxE = coinConfig.Fees.size(); feeIdx != feeIdxE; ++feeIdx) {
         PoolFeeEntry &entry = backendConfig.PoolFee[feeIdx];
         entry.User = coinConfig.Fees[feeIdx].Address;
@@ -231,6 +232,13 @@ int main(int argc, char *argv[])
           LOG_F(ERROR, "Invalid pool fee: %.3f", entry.Percentage);
           return 1;
         }
+
+        feePercentageSum += entry.Percentage;
+      }
+
+      if (feePercentageSum > 100.0f) {
+        LOG_F(ERROR, "Invalid summary pool fee: %.3lf", feePercentageSum);
+        return 1;
       }
 
       std::sort(backendConfig.PoolFee.begin(), backendConfig.PoolFee.end(), [](const PoolFeeEntry &l, const PoolFeeEntry &r) { return l.User < r.User; });
@@ -241,9 +249,9 @@ int main(int argc, char *argv[])
 
       // Nodes
       std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(monitorBase, coinInfo, totalThreadsNum));
-      for (size_t nodeIdx = 0, nodeIdxE = coinConfig.Nodes.size(); nodeIdx != nodeIdxE; ++nodeIdx) {
+      for (size_t nodeIdx = 0, nodeIdxE = coinConfig.GetWorkNodes.size(); nodeIdx != nodeIdxE; ++nodeIdx) {
         CNetworkClient *client;
-        const CNodeConfig &node = coinConfig.Nodes[nodeIdx];
+        const CNodeConfig &node = coinConfig.GetWorkNodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
           client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
         } else {
@@ -251,7 +259,20 @@ int main(int argc, char *argv[])
           return 1;
         }
 
-        dispatcher->addClient(client);
+        dispatcher->addGetWorkClient(client);
+      }
+
+      for (size_t nodeIdx = 0, nodeIdxE = coinConfig.RPCNodes.size(); nodeIdx != nodeIdxE; ++nodeIdx) {
+        CNetworkClient *client;
+        const CNodeConfig &node = coinConfig.RPCNodes[nodeIdx];
+        if (node.Type == "bitcoinrpc") {
+          client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
+        } else {
+          LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
+          return 1;
+        }
+
+        dispatcher->addRPCClient(client);
       }
 
       // Initialize price fetcher
@@ -297,7 +318,7 @@ int main(int argc, char *argv[])
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, instIdx, instIdxE, instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig);
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;

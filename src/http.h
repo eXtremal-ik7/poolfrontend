@@ -38,6 +38,7 @@ private:
   void onUserChangeEmail(rapidjson::Document &document);
   void onUserChangePassword(rapidjson::Document &document);
   void onUserChangePasswordInitiate(rapidjson::Document &document);
+  void onUserChangePasswordForce(rapidjson::Document &document);
   void onUserGetCredentials(rapidjson::Document &document);
   void onUserGetSettings(rapidjson::Document &document);
   void onUserUpdateCredentials(rapidjson::Document &document);
@@ -76,6 +77,7 @@ private:
     fnUserChangeEmail,
     fnUserChangePassword,
     fnUserChangePasswordInitiate,
+    fnUserChangePasswordForce,
     fnUserGetCredentials,
     fnUserGetSettings,
     fnUserUpdateCredentials,

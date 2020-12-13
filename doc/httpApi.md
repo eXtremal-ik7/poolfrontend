@@ -4,6 +4,7 @@
 * [User management](#user-management)
    * [userChangePassword](#userchangepassword)
    * [userChangePasswordInitiate](#userchangepasswordinitiate)
+   * [userChangePasswordForce](#userchangepasswordforce)
    * [userCreate](#usercreate)
    * [userResendEmail](#userresendemail)
    * [userAction](#useraction)
@@ -71,6 +72,27 @@ Initiate change user's password procedure. if parameter <poolfrontend.smtpEnable
 ### curl example:
 ```
 curl -X POST -d '{"login": "user"}' http://localhost:18880/api/userChangePasswordInitiate
+```
+
+### response examples:
+```
+{"status": "ok"}
+```
+
+## userChangePasswordForce
+Change user password directly (only for admin account)
+
+### arguments:
+* [required] id:string - admin's session id
+* [required] login:string - user's login
+* [required] newPassword:string - new password
+
+### return values:
+* status:string - can be one of common status values
+
+### curl example:
+```
+curl -X POST -d '{"id": "f3c70b71fe9ad27d2b1861c408058cbc39949a1a3aa834baccdc29721580bc28d6e6a42a5431f023c5031bd6009a1df65d67165b37181b2d991ca3022a703a65", "login": "user", "newPassword": "12345678"}' http://localhost:18880/api/userChangePasswordForce
 ```
 
 ### response examples:

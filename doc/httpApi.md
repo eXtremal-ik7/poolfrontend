@@ -341,8 +341,6 @@ curl -X POST -d "{\"id\": \"147a30085b6f45a693e1dd2ec2c69642eb15df4fd53256111522
 {"status": "ok"}
 ```
 
-# Backend API functions
-
 ## userEnumerateAll
 Returns all registered users (for admin account only)
 
@@ -397,6 +395,8 @@ curl -X POST -d '{"id": "c26411c326d0e62d02cb0d1614a37eac4e3b848fb37eb7a46f3a2dd
 }
 ```
 
+# Backend API functions
+
 ## backendManualPayout
 Force payout all funds from user balance
 
@@ -422,37 +422,46 @@ curl -X POST -d '{"id": "ae860bab2faca258c790563a5f97640e55c3c8f23df3fbfde07ed46
 ## backendQueryCoins
 Function returns coins listed on pool
 
+
 ### arguments:
 none
 
 ### return values:
-array of objects with these fields:
-* name:string - unique coin id
-* fullName:string - display coin name
+* status:string - can be one of common status values
+* coins: array of objects with these fields:
+  * name:string - unique coin id
+  * fullName:string - display coin name
+  * algorithm:string - mining algorithm
 
 ### curl example:
 ```curl -X POST http://localhost:18880/api/backendQueryCoins```
 
 ### response examples:
 ```
-[
+{"status": "ok", 
+  "coins":[
    {
       "name":"BTC",
-      "fullName":"Bitcoin"
+      "fullName":"Bitcoin",
+      "algorithm":"sha256"
    },
    {
       "name":"DGB.sha256",
-      "fullName":"Digibyte(sha256)"
+      "fullName":"Digibyte(sha256)",
+      "algorithm":"sha256"
    },
    {
       "name":"BTC.regtest",
-      "fullName":"Bitcoin"
+      "fullName":"Bitcoin",
+      "algorithm":"sha256"
    },
    {
       "name":"LTC.testnet",
-      "fullName":"Litecoin"
+      "fullName":"Litecoin",
+      "algorithm":"scrypt"
    }
-]
+  ]
+}
 ```
 
 ## backendQueryUserBalance

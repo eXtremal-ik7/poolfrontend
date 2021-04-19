@@ -72,6 +72,7 @@ struct CPoolFrontendConfig {
   bool IsMaster;
   unsigned HttpPort;
   unsigned WorkerThreadsNum;
+  unsigned HttpThreadsNum;
   std::string AdminPasswordHash;
   std::string ObserverPasswordHash;
   std::string DbPath;

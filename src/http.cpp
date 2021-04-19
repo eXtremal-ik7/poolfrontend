@@ -38,7 +38,9 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"backendQueryWorkerStatsHistory", {hmPost, fnBackendQueryWorkerStatsHistory}},
   {"backendUpdateProfitSwitchCoeff", {hmPost, fnBackendUpdateProfitSwitchCoeff}},
   // Instance functions
-  {"instanceEnumerateAll", {hmPost, fnInstanceEnumerateAll}}
+  {"instanceEnumerateAll", {hmPost, fnInstanceEnumerateAll}},
+  // Complex mining stats functions
+  {"complexMiningStatsGetInfo", {hmPost, fnComplexMiningStatsGetInfo}}
 };
 
 static inline bool rawcmp(Raw data, const char *operand) {
@@ -260,6 +262,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnBackendQueryProfitSwitchCoeff : onBackendQueryProfitSwitchCoeff(document); break;
       case fnBackendUpdateProfitSwitchCoeff : onBackendUpdateProfitSwitchCoeff(document); break;
       case fnInstanceEnumerateAll : onInstanceEnumerateAll(document); break;
+      case fnComplexMiningStatsGetInfo : onComplexMiningStatsGetInfo(document); break;
       default:
         reply404();
         return 0;
@@ -1020,39 +1023,38 @@ void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
 
 void PoolHttpConnection::queryStatsHistory(StatisticDb *statistic, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime)
 {
-  objectIncrementReference(aioObjectHandle(Socket_), 1);
-  statistic->queryStatsHistory(login, worker, timeFrom, timeTo, groupByInterval, [this, statistic, currentTime](const std::vector<StatisticDb::CStats> &stats) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
+  std::vector<StatisticDb::CStats> stats;
+  statistic->getHistory(login, worker, timeFrom, timeTo, groupByInterval, stats);
 
+  xmstream stream;
+  reply200(stream);
+  size_t offset = startChunk(stream);
+
+  {
+    JSON::Object object(stream);
+    object.addString("status", "ok");
+    object.addString("powerUnit", statistic->getCoinInfo().getPowerUnitName());
+    object.addInt("powerMultLog10", statistic->getCoinInfo().PowerMultLog10);
+    object.addInt("currentTime", currentTime);
+    object.addField("stats");
     {
-      JSON::Object object(stream);
-      object.addString("status", "ok");
-      object.addString("powerUnit", statistic->getCoinInfo().getPowerUnitName());
-      object.addInt("powerMultLog10", statistic->getCoinInfo().PowerMultLog10);
-      object.addInt("currentTime", currentTime);
-      object.addField("stats");
-      {
-        JSON::Array workersOutput(stream);
-        for (size_t i = 0, ie = stats.size(); i != ie; ++i) {
-          workersOutput.addField();
-          {
-            JSON::Object workerOutput(stream);
-            workerOutput.addString("name", stats[i].WorkerId);
-            workerOutput.addInt("time", stats[i].Time);
-            workerOutput.addDouble("shareRate", stats[i].SharesPerSecond);
-            workerOutput.addDouble("shareWork", stats[i].SharesWork);
-            workerOutput.addInt("power", stats[i].AveragePower);
-          }
+      JSON::Array workersOutput(stream);
+      for (size_t i = 0, ie = stats.size(); i != ie; ++i) {
+        workersOutput.addField();
+        {
+          JSON::Object workerOutput(stream);
+          workerOutput.addString("name", stats[i].WorkerId);
+          workerOutput.addInt("time", stats[i].Time);
+          workerOutput.addDouble("shareRate", stats[i].SharesPerSecond);
+          workerOutput.addDouble("shareWork", stats[i].SharesWork);
+          workerOutput.addInt("power", stats[i].AveragePower);
         }
       }
     }
+  }
 
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
-    objectDecrementReference(aioObjectHandle(Socket_), 1);
-  });
+  finishChunk(stream, offset);
+  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
 void PoolHttpConnection::onBackendQueryUserStatsHistory(rapidjson::Document &document)
@@ -1151,6 +1153,13 @@ void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
         object.addString("name", info.Name);
         object.addString("fullName", info.FullName);
         object.addString("algorithm", info.Algorithm);
+        object.addString("minimalPayout", FormatMoney(backend->getConfig().MinimalAllowedPayout, info.RationalPartSize));
+
+        // Calculate fee
+        double fee = 0.0;
+        for (const auto &feeEntry: backend->getConfig().PoolFee)
+          fee += feeEntry.Percentage;
+        object.addDouble("totalFee", fee);
       }
     }
   }
@@ -1501,14 +1510,46 @@ void PoolHttpConnection::onInstanceEnumerateAll(rapidjson::Document&)
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
+void PoolHttpConnection::onComplexMiningStatsGetInfo(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string login;
+  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin")) {
+    replyWithStatus("unknown_id");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.miningStats().query(document, [this](const char *data, size_t size) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+    stream.write(data, size);
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
 PoolHttpServer::PoolHttpServer(uint16_t port,
                                UserManager &userMgr,
                                std::vector<std::unique_ptr<PoolBackend>> &backends,
                                std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic,
-                               const CPoolFrontendConfig &config) :
+                               ComplexMiningStats &complexMiningStats,
+                               const CPoolFrontendConfig &config,
+                               size_t threadsNum) :
   Port_(port),
   UserMgr_(userMgr),
-  Config_(config)
+  MiningStats_(complexMiningStats),
+  Config_(config),
+  ThreadsNum_(threadsNum)
 {
   Base_ = createAsyncBase(amOSDefault);
   for (size_t i = 0, ie = backends.size(); i != ie; ++i) {
@@ -1544,19 +1585,29 @@ bool PoolHttpServer::start()
 
   ListenerSocket_ = newSocketIo(Base_, hSocket);
   aioAccept(ListenerSocket_, 0, acceptCb, this);
-  Thread_ = std::thread([](PoolHttpServer *server) {
-    loguru::set_thread_name("http");
-    InitializeWorkerThread();
-    LOG_F(INFO, "http server started tid=%u", GetGlobalThreadId());
-    asyncLoop(server->Base_);
-  }, this);
+
+  Threads_.reset(new std::thread[ThreadsNum_]);
+  for (size_t i = 0; i < ThreadsNum_; i++) {
+    Threads_[i] = std::thread([i](PoolHttpServer *server) {
+      char threadName[16];
+      snprintf(threadName, sizeof(threadName), "http%zu", i);
+      loguru::set_thread_name(threadName);
+      InitializeWorkerThread();
+      LOG_F(INFO, "http server started tid=%u", GetGlobalThreadId());
+      asyncLoop(server->Base_);
+    }, this);
+  }
+
   return true;
 }
 
 void PoolHttpServer::stop()
 {
   postQuitOperation(Base_);
-  Thread_.join();
+  for (size_t i = 0; i < ThreadsNum_; i++) {
+    LOG_F(INFO, "http worker %zu finishing", i);
+    Threads_[i].join();
+  }
 }
 
 

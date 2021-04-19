@@ -7,6 +7,7 @@
 #include "poolcore/thread.h"
 #include "poolcommon/utils.h"
 #include "poolinstances/fabric.h"
+#include "poolinstances/stratum.h"
 
 #include "asyncio/asyncio.h"
 #include "asyncio/socket.h"
@@ -41,6 +42,7 @@ struct PoolContext {
 
   std::unique_ptr<UserManager> UserMgr;
   std::unique_ptr<PoolHttpServer> HttpServer;
+  std::unique_ptr<ComplexMiningStats> MiningStats;
 };
 
 int main(int argc, char *argv[])
@@ -61,6 +63,7 @@ int main(int argc, char *argv[])
   PoolContext poolContext;
   unsigned totalThreadsNum = 0;
   unsigned workerThreadsNum = 0;
+  unsigned httpThreadsNum = 0;
 
   initializeSocketSubsystem();
   asyncBase *monitorBase = createAsyncBase(amOSDefault);
@@ -109,8 +112,11 @@ int main(int argc, char *argv[])
     poolContext.IsMaster = config.IsMaster;
     poolContext.HttpPort = config.HttpPort;
     workerThreadsNum = config.WorkerThreadsNum;
+    httpThreadsNum = config.HttpThreadsNum;
     if (workerThreadsNum == 0)
       workerThreadsNum = std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() / 4 : 2;
+    if (httpThreadsNum == 0)
+      httpThreadsNum = 1;
 
     // Calculate total threads num
     unsigned backendsNum = static_cast<unsigned>(config.Coins.size());
@@ -118,7 +124,8 @@ int main(int argc, char *argv[])
       1 +                   // Monitor (listeners and clients polling)
       workerThreadsNum +    // Share checkers
       backendsNum*2 +       // Backends & metastatistic algorithm servers
-      1;                    // HTTP server
+      httpThreadsNum +      // HTTP server
+      1;                    // Complex mining stats service
     LOG_F(INFO, "Worker threads: %u; total pool threads: %u", workerThreadsNum, totalThreadsNum);
 
     // Initialize user manager
@@ -279,7 +286,7 @@ int main(int argc, char *argv[])
       CPriceFetcher *priceFetcher = new CPriceFetcher(monitorBase, coinInfo);
 
       // Initialize backend
-      PoolBackend *backend = new PoolBackend(std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher, *priceFetcher);
+      PoolBackend *backend = new PoolBackend(createAsyncBase(amOSDefault), std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher, *priceFetcher);
 
       if (coinConfig.ProfitSwitchCoeff != 0.0)
         backend->setProfitSwitchCoeff(coinConfig.ProfitSwitchCoeff);
@@ -301,7 +308,7 @@ int main(int argc, char *argv[])
 
         PoolBackendConfig algoConfig;
         algoConfig.dbPath = poolContext.DatabasePath / algoInfo.Name;
-        StatisticServer *server = new StatisticServer(algoConfig, algoInfo);
+        StatisticServer *server = new StatisticServer(createAsyncBase(amOSDefault), algoConfig, algoInfo);
         poolContext.AlgoMetaStatistic.emplace_back(server);
         AlgoIt = knownAlgo.insert(AlgoIt, std::make_pair(coinInfo.Algorithm, server));
       }
@@ -310,6 +317,9 @@ int main(int argc, char *argv[])
     }
 
     std::sort(poolContext.Backends.begin(), poolContext.Backends.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
+
+    // Initialize "complex mining stats" service
+    poolContext.MiningStats.reset(new ComplexMiningStats);
 
     // Initialize workers
     poolContext.ThreadPool.reset(new CThreadPool(workerThreadsNum));
@@ -323,6 +333,8 @@ int main(int argc, char *argv[])
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
       }
+
+      instance->setComplexMiningStats(poolContext.MiningStats.get());
 
       std::string algo;
       for (const auto &linkedCoinName: instanceConfig.Backends) {
@@ -370,7 +382,7 @@ int main(int argc, char *argv[])
     dispatcher->poll();
   }
 
-  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr.get(), poolContext.Backends, poolContext.AlgoMetaStatistic, config));
+  poolContext.HttpServer.reset(new PoolHttpServer(poolContext.HttpPort, *poolContext.UserMgr, poolContext.Backends, poolContext.AlgoMetaStatistic, *poolContext.MiningStats, config, httpThreadsNum));
   poolContext.HttpServer->start();
 
   // Start monitor thread

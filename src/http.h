@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "poolcore/backend.h"
+#include "poolcore/complexMiningStats.h"
 #include <p2putils/HttpRequestParse.h>
 
 class PoolHttpServer;
@@ -61,6 +62,8 @@ private:
 
   void onInstanceEnumerateAll(rapidjson::Document &document);
 
+  void onComplexMiningStatsGetInfo(rapidjson::Document &document);
+
   void queryStatsHistory(StatisticDb *statistic, const std::string &login, const std::string &worker, int64_t timeFrom, int64_t timeTo, int64_t groupByInterval, int64_t currentTime);
   void replyWithStatus(const char *status);
 
@@ -100,7 +103,10 @@ private:
     fnBackendUpdateProfitSwitchCoeff,
 
     // Instance functions
-    fnInstanceEnumerateAll
+    fnInstanceEnumerateAll,
+
+    // Complex mining stats functions
+    fnComplexMiningStatsGetInfo
   };
 
   static std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> FunctionNameMap_;
@@ -127,7 +133,9 @@ public:
                  UserManager &userMgr,
                  std::vector<std::unique_ptr<PoolBackend>> &backends,
                  std::vector<std::unique_ptr<StatisticServer>> &algoMetaStatistic,
-                 const CPoolFrontendConfig &config);
+                 ComplexMiningStats &complexMiningStats,
+                 const CPoolFrontendConfig &config,
+                 size_t threadsNum);
 
   bool start();
   void stop();
@@ -153,6 +161,7 @@ public:
 
   std::vector<PoolBackend*> &backends() { return Backends_; }
   std::vector<StatisticDb*> &statistics() { return Statistic_; }
+  ComplexMiningStats &miningStats() { return MiningStats_; }
 
 private:
   static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);
@@ -163,10 +172,12 @@ private:
   asyncBase *Base_;
   uint16_t Port_;
   UserManager &UserMgr_;
+  ComplexMiningStats &MiningStats_;
   const CPoolFrontendConfig &Config_;
+  size_t ThreadsNum_;
   std::vector<PoolBackend*> Backends_;
   std::vector<StatisticDb*> Statistic_;
 
-  std::thread Thread_;
+  std::unique_ptr<std::thread[]> Threads_;
   aioObject *ListenerSocket_;
 };

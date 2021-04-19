@@ -251,9 +251,6 @@ int main(int argc, char **argv)
       exit(1);
     }
     context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address, user, password, true));
-  } else {
-    LOG_F(ERROR, "unknown client type: %s", type.c_str());
-    return 1;
   }
 
   if (method == "getBalance") {

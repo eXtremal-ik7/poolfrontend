@@ -5,6 +5,7 @@
       "httpPort":18880,
       "poolName":"pool",
       "poolHostAddress":"localhost",
+      "poolHostProtocol":"http",
       "poolActivateLinkPrefix":"/actions/useracivate?id=",
       "poolChangePasswordLinkPrefix":"/actions/userChangePassword?id=",
       "adminPasswordHash":"359f68836fd07e68b0c1a28535e856a5ec0689aac101aa4151105b8bec49a018",
@@ -21,13 +22,11 @@
    "coins":[
       {
          "name":"BTC",
-         "nodes":[
-            {
-               "type":"bitcoinrpc",
-               "address":"localhost",
-               "login":"user",
-               "password":"password"
-            }
+         "getWorkNodes":[
+            {"type":"bitcoinrpc", "address":"localhost", "login":"user", "password":"password"}
+         ],
+         "RPCNodes":[
+            {"type":"bitcoinrpc", "address":"localhost", "login":"user", "password":"password"}
          ],
          "fees":[
            /*{
@@ -56,13 +55,11 @@
       },
       {
          "name":"XPM",
-         "nodes":[
-            {
-               "type":"bitcoinrpc",
-               "address":"localhost",
-               "login":"user",
-               "password":"password"
-            }
+         "getWorkNodes":[
+            {"type":"bitcoinrpc","address":"localhost","login":"user","password":"password"}
+         ],
+         "RPCNodes":[
+            {"type":"bitcoinrpc","address":"localhost","login":"user","password":"password"}
          ],
          "fees":[
            /*{
@@ -70,7 +67,7 @@
              "percentage":1.0
            }*/
          ],
-         "requiredConfirmations":10,
+         "requiredConfirmations":12,
          "defaultPayoutThreshold":"4",
          "minimalAllowedPayout":"0.01",
          "keepRoundTime":3,

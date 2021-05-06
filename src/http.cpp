@@ -169,6 +169,17 @@ static inline void jsonParseDouble(rapidjson::Document &document, const char *na
     *validAcc = false;
 }
 
+static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, double defaultValue, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsDouble())
+      *out = document[name].GetDouble();
+    else
+      *validAcc = false;
+  } else {
+    *out = defaultValue;
+  }
+}
+
 static inline void jsonParseIntOrDouble(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsDouble())
@@ -188,6 +199,10 @@ static inline void parseUserCredentials(rapidjson::Document &document, UserManag
   jsonParseString(document, "password", credentials.Password, "", validAcc);
   jsonParseString(document, "name", credentials.Name, "", validAcc);
   jsonParseString(document, "email", credentials.EMail, "", validAcc);
+  jsonParseBoolean(document, "isActive", &credentials.IsActive, false, validAcc);
+  jsonParseBoolean(document, "isReadOnly", &credentials.IsReadOnly, false, validAcc);
+  jsonParseString(document, "parentUser", credentials.ParentUser, "", validAcc);
+  jsonParseDouble(document, "defaultFee", &credentials.DefaultFee, 0.0, validAcc);
 }
 
 void PoolHttpConnection::run()
@@ -380,13 +395,9 @@ void PoolHttpConnection::onUserCreate(rapidjson::Document &document)
 {
   bool validAcc = true;
   std::string sessionId;
-  bool isActivated;
-  bool isReadOnly;
   UserManager::Credentials credentials;
 
   jsonParseString(document, "id", sessionId, "", &validAcc);
-  jsonParseBoolean(document, "isActive", &isActivated, false, &validAcc);
-  jsonParseBoolean(document, "isReadOnly", &isReadOnly, false, &validAcc);
   parseUserCredentials(document, credentials, &validAcc);
 
   if (!validAcc) {
@@ -402,16 +413,11 @@ void PoolHttpConnection::onUserCreate(rapidjson::Document &document)
     }
   }
 
-  if ((isActivated || isReadOnly) && login != "admin") {
-    replyWithStatus("unknown_id");
-    return;
-  }
-
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userCreate(std::move(credentials), [this](const char *status) {
+  Server_.userManager().userCreate(login, std::move(credentials), [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
-  }, isActivated, isReadOnly);
+  });
 }
 
 void PoolHttpConnection::onUserResendEmail(rapidjson::Document &document)

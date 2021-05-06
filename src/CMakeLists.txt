@@ -5,7 +5,7 @@ HunterGate(
 )
 
 cmake_minimum_required(VERSION 3.11)
-project(poolfrontend)
+project(hathorpool)
 
 set (CMAKE_CXX_STANDARD 20)
 option(SANITIZER_ENABLED "Build with address sanitizer" OFF)
@@ -98,6 +98,9 @@ add_executable(poolfrontend
   config.cpp
   main.cpp
   http.cpp
+  hathorRpcClient.cpp
+  HTR.cpp
+  probSwitcher.cpp
 )
 
 target_link_libraries(poolfrontend ${LIBRARIES})
@@ -105,6 +108,8 @@ target_link_libraries(poolfrontend ${LIBRARIES})
 # Node rpc (test node rpc)
 add_executable(noderpc
   noderpc.cpp
+  HTR.cpp
+  hathorRpcClient.cpp
 )
 
 target_link_libraries(noderpc ${LIBRARIES})

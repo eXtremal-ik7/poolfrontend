@@ -112,6 +112,8 @@ Pool frontend must have a handler for configured activation link fornat.
 * [optional] isActive:boolean - if true, function will create activated user (option available for admin account only)
 * [optional] isReadOnly:boolean - if true, user will have no write access to his account (option available for admin account only)
 * [optional] id:string - unique user session id returned by userlogin function, only admin session is usable
+* [optional] parentUser:string - parent user for personal fee. if this argument not empty, caller must be a /parentUser/ ('id' argument is a token returned by 'userLogin' function for /parentUser/) or admin
+* [optional] defaultFee:double - default fee coefficient (range [0, 1])
 
 ### return values:
 * status:string - can be one of common status values or:
@@ -123,6 +125,8 @@ Pool frontend must have a handler for configured activation link fornat.
   * duplicate_login: already have user with requested login
   * smtp_client_create_error: internal error with SMTP protocol client
   * email_send_error: error received from SMTP server, details in pool log
+  * parent_select_not_allowed: you can create user with personal fee setted to you only (or you need to be admin)
+  * parent_not_exists: parentUser argument points to non-existent user
 
 ### curl example:
 ```

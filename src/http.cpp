@@ -764,12 +764,14 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
             usersArray.addField();
             {
               JSON::Object userObject(stream);
-              userObject.addString("login", user.Login);
-              userObject.addString("name", user.Name);
-              userObject.addString("email", user.EMail);
-              userObject.addInt("registrationDate", user.RegistrationDate);
-              userObject.addBoolean("isActive", user.IsActive);
-              userObject.addBoolean("isReadOnly", user.IsReadOnly);
+              userObject.addString("login", user.Credentials.Login);
+              userObject.addString("name", user.Credentials.Name);
+              userObject.addString("email", user.Credentials.EMail);
+              userObject.addInt("registrationDate", user.Credentials.RegistrationDate);
+              userObject.addBoolean("isActive", user.Credentials.IsActive);
+              userObject.addBoolean("isReadOnly", user.Credentials.IsReadOnly);
+              userObject.addString("parentUser", user.Credentials.ParentUser);
+              userObject.addDouble("defaultFee", user.Credentials.DefaultFee);
               userObject.addInt("workers", user.WorkersNum);
               userObject.addDouble("shareRate", user.SharesPerSecond);
               userObject.addInt("power", user.AveragePower);

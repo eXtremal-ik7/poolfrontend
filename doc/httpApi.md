@@ -371,6 +371,8 @@ Returns all registered users for admin/observer account or all 'child' users wit
   * name:string
   * email:string
   * registrationDate:integer - uses unix time format
+  * parentUser:string - parent user for personal fee (empty string if not set)
+  * defaultFee:double - default personal fee to parent user
   * workers:integer - number of connections for current user in last N minutes
   * shareRate:float - shares per second
   * power:integer - usually hashrate, depends on coin type

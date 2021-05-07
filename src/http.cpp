@@ -724,12 +724,6 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
     return;
   }
 
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin" && login != "observer")) {
-    replyWithStatus("unknown_id");
-    return;
-  }
-
   // sortBy convert
   StatisticDb::CredentialsWithStatistic::EColumns column;
   if (sortBy == "login") {
@@ -754,15 +748,15 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().enumerateUsers([this, statistic, offset, size, column, sortDescending](std::vector<UserManager::Credentials> &allUsers) {
-    statistic->queryAllusersStats(std::move(allUsers), [this](const std::vector<StatisticDb::CredentialsWithStatistic> &result) {
+  Server_.userManager().enumerateUsers(sessionId, [this, statistic, offset, size, column, sortDescending](const char *status, std::vector<UserManager::Credentials> &allUsers) {
+    statistic->queryAllusersStats(std::move(allUsers), [this, status](const std::vector<StatisticDb::CredentialsWithStatistic> &result) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
 
       {
         JSON::Object object(stream);
-        object.addString("status", "ok");
+        object.addString("status", status);
         object.addField("users");
         {
           JSON::Array usersArray(stream);

@@ -45,6 +45,7 @@ private:
   void onUserUpdateCredentials(rapidjson::Document &document);
   void onUserUpdateSettings(rapidjson::Document &document);
   void onUserEnumerateAll(rapidjson::Document &document);
+  void onUserUpdatePersonalFee(rapidjson::Document &document);
 
   void onBackendManualPayout(rapidjson::Document &document);
   void onBackendQueryUserBalance(rapidjson::Document &document);
@@ -86,6 +87,7 @@ private:
     fnUserUpdateCredentials,
     fnUserUpdateSettings,
     fnUserEnumerateAll,
+    fnUserUpdatePersonalFee,
 
     // Backend functions
     fnBackendManualPayout,

@@ -23,6 +23,7 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userUpdateCredentials", {hmPost, fnUserUpdateCredentials}},
   {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
   {"userEnumerateAll", {hmPost, fnUserEnumerateAll}},
+  {"userUpdatePersonalFee", {hmPost, fnUserUpdatePersonalFee}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
   {"backendQueryCoins", {hmPost, fnBackendQueryCoins}},
@@ -263,6 +264,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserUpdateCredentials: onUserUpdateCredentials(document); break;
       case fnUserUpdateSettings: onUserUpdateSettings(document); break;
       case fnUserEnumerateAll: onUserEnumerateAll(document); break;
+      case fnUserUpdatePersonalFee: onUserUpdatePersonalFee(document); break;
       case fnBackendManualPayout: onBackendManualPayout(document); break;
       case fnBackendQueryUserBalance: onBackendQueryUserBalance(document); break;
       case fnBackendQueryUserStats: onBackendQueryUserStats(document); break;
@@ -788,6 +790,25 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
       objectDecrementReference(aioObjectHandle(Socket_), 1);
 
     }, offset, size, column, sortDescending);
+  });
+}
+
+void PoolHttpConnection::onUserUpdatePersonalFee(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  UserManager::Credentials credentials;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  parseUserCredentials(document, credentials, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().updatePersonalFee(sessionId, std::move(credentials), [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }
 

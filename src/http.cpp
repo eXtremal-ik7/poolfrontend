@@ -204,6 +204,19 @@ static inline void parseUserCredentials(rapidjson::Document &document, UserManag
   jsonParseBoolean(document, "isReadOnly", &credentials.IsReadOnly, false, validAcc);
   jsonParseString(document, "parentUser", credentials.ParentUser, "", validAcc);
   jsonParseDouble(document, "defaultFee", &credentials.DefaultFee, 0.0, validAcc);
+  if (document.HasMember("specificFee") && document["specificFee"].IsArray()) {
+    rapidjson::Value::Array specificFee = document["specificFee"].GetArray();
+    for (rapidjson::SizeType i = 0, ie = specificFee.Size(); i != ie; ++i) {
+      rapidjson::Value &record = specificFee[i];
+      if (!record.HasMember("coin") && !record["coin"].IsString() &&
+          !record.HasMember("fee") && !record["fee"].IsDouble())
+        continue;
+
+      auto &outRecord = credentials.SpecificFee.emplace_back();
+      outRecord.CoinName = record["coin"].GetString();
+      outRecord.Fee = record["fee"].GetDouble();
+    }
+  }
 }
 
 void PoolHttpConnection::run()
@@ -782,6 +795,16 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
               userObject.addBoolean("isReadOnly", user.Credentials.IsReadOnly);
               userObject.addString("parentUser", user.Credentials.ParentUser);
               userObject.addDouble("defaultFee", user.Credentials.DefaultFee);
+              userObject.addField("specificFee");
+              {
+                JSON::Array specificFeeArray(stream);
+                for (const auto &specificFee: user.Credentials.SpecificFee) {
+                  specificFeeArray.addField();
+                  JSON::Object specificFeeRecord(stream);
+                  specificFeeRecord.addString("coin", specificFee.CoinName);
+                  specificFeeRecord.addDouble("fee", specificFee.Fee);
+                }
+              }
               userObject.addInt("workers", user.WorkersNum);
               userObject.addDouble("shareRate", user.SharesPerSecond);
               userObject.addInt("power", user.AveragePower);
@@ -806,7 +829,7 @@ void PoolHttpConnection::onUserUpdatePersonalFee(rapidjson::Document &document)
   UserManager::Credentials credentials;
   jsonParseString(document, "id", sessionId, &validAcc);
   parseUserCredentials(document, credentials, &validAcc);
-  if (!validAcc) {
+  if (!validAcc || credentials.ParentUser.empty()) {
     replyWithStatus("json_format_error");
     return;
   }

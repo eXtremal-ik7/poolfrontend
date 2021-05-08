@@ -116,6 +116,12 @@ Pool frontend must have a handler for configured activation link fornat.
 * [optional] id:string - unique user session id returned by userlogin function, only admin session is usable
 * [optional] parentUser:string - parent user for personal fee. if this argument not empty, caller must be a /parentUser/ ('id' argument is a token returned by 'userLogin' function for /parentUser/) or admin
 * [optional] defaultFee:double - default fee coefficient (range [0, 1])
+* [optional] specificFee:[SpecificFee] - array of individual coin settings
+
+### data structures
+* SpecificFee:
+  * [required] coin:string - coin name
+  * [required] fee:double - fee coefficient (range [0, 1])
 
 ### return values:
 * status:string - can be one of common status values or:
@@ -134,6 +140,7 @@ Pool frontend must have a handler for configured activation link fornat.
 ```
 curl -X POST -d '{"login": "user", "password": "12345678", "email": "my@email.com"}' http://localhost:18880/api/userCreate
 curl -X POST -d '{"login": "ro", "password": "12345678", "isActive": true, "isReadOnly": true, "id": "aa342d65135cfb6485c8ca52bacd774418fd1a76fbce5a418ae607a4471c9de0a52e46f36d2b5d1645f83598e34fed7e2750772080122fdaf92becf5e60ed058"}' http://localhost:18880/api/userCreate
+curl -X POST -d '{"login": "user10", "password": "12345678", "email": "user10@mail.none", "isActive": true, "isReadOnly": false, "id": "31a705754f8115d08018652553cccf38dfbabe219ba2c02ea137b1d391149c96e35f18a8abd0e8f67e4dea73808e610ee359bb359a5c9335b1806f97fe33092c", "parentUser": "user1", "defaultFee": 0.5, "specificFee": [{"coin": "BTC.regtest", "fee": 0.5}]} ' http://localhost:18880/api/userCreate
 ```
 
 ### response examples:
@@ -396,10 +403,16 @@ Returns all registered users for admin/observer account or all 'child' users wit
   * registrationDate:integer - uses unix time format
   * parentUser:string - parent user for personal fee (empty string if not set)
   * defaultFee:double - default personal fee to parent user
+  * specificFee:[SpecificFee]
   * workers:integer - number of connections for current user in last N minutes
   * shareRate:float - shares per second
   * power:integer - usually hashrate, depends on coin type
   * lastShareTime:integer - time of last received shared by user
+  
+### data structures
+* SpecificFee:
+  * [required] coin:string - coin name
+  * [required] fee:double - fee coefficient (range [0, 1])
 
 ### curl example:
 ```
@@ -433,6 +446,12 @@ Update personal fee settings for specified user (for admin account only)
 * [required] login:string
 * [required] parentUser:string - parent user for personal fee.
 * [required] defaultFee:double - default fee coefficient (range [0, 1])
+* [optional] specificFee:[SpecificFee] - array of individual coin settings
+
+### data structures
+* SpecificFee:
+  * [required] coin:string - coin name
+  * [required] fee:double - fee coefficient (range [0, 1])
 
 ### return values:
 * status:string - can be one of common status values or:
@@ -443,6 +462,7 @@ Update personal fee settings for specified user (for admin account only)
 ### curl example:
 ```
 curl -X POST -d '{"id": "99a8be377b8d8c95845624ac6c1da7bc97e5e8d4a0b27ef5668bda114e3c89d9df42b3148cfe11eb88403e527b6962d833c15b14dc1bb3fbad20ec15262a62da", "login": "user3", "parentUser": "user1", "defaultFee": 0.33}' http://localhost:18880/api/userUpdatePersonalFee
+curl -X POST -d '{"id": "10e56e632270e9b289491923a3bec8eb9e7b1d8ef698b9013159f1471166d86a126d2a633577654a979d9b5e2ea27752166107ca89bdaf39688f2e149e1a67cc", "login": "user3", "parentUser": "user2", "defaultFee": 0.1, "specificFee": [{"coin": "BTC.regtest", "fee": 0.5}, {"coin": "HTR", "fee": 0.1}]}' http://localhost:18880/api/userUpdatePersonalFee
 ```
 
 ### response examples:

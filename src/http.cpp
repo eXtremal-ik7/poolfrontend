@@ -644,14 +644,27 @@ void PoolHttpConnection::onUserGetSettings(rapidjson::Document &document)
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onUserUpdateCredentials(rapidjson::Document&)
+void PoolHttpConnection::onUserUpdateCredentials(rapidjson::Document &document)
 {
-  xmstream stream;
-  reply200(stream);
-  size_t offset = startChunk(stream);
-  stream.write("{\"error\": \"not implemented\"}\n");
-  finishChunk(stream, offset);
-  aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  bool validAcc = true;
+  std::string sessionId;
+  std::string targetLogin;
+  UserManager::Credentials credentials;
+
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
+  parseUserCredentials(document, credentials, &validAcc);
+
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().updateCredentials(sessionId, targetLogin, std::move(credentials), [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)

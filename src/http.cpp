@@ -609,37 +609,34 @@ void PoolHttpConnection::onUserGetSettings(rapidjson::Document &document)
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write('{');
-  jsonSerializeString(stream, "status", "ok");
-  stream.write("\"coins\": [");
 
-  std::string login;
-  if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
-    bool firstIteration = true;
-    for (const auto &coinInfo: Server_.userManager().coinInfo()) {
-      if (!firstIteration)
-        stream.write(',');
-      stream.write('{');
-      jsonSerializeString(stream, "name", coinInfo.Name.c_str());
-
-      UserSettingsRecord settings;
-      if (Server_.userManager().getUserCoinSettings(login, coinInfo.Name, settings)) {
-        jsonSerializeString(stream, "address", settings.Address.c_str());
-        jsonSerializeString(stream, "payoutThreshold", FormatMoney(settings.MinimalPayout, coinInfo.RationalPartSize).c_str());
-        jsonSerializeBoolean(stream, "autoPayoutEnabled", settings.AutoPayout, true);
-      } else {
-        jsonSerializeNull(stream, "address");
-        jsonSerializeNull(stream, "payoutThreshold");
-        jsonSerializeBoolean(stream, "autoPayoutEnabled", false, true);
+  {
+    JSON::Object object(stream);
+    std::string login;
+    if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+      object.addString("status", "ok");
+      object.addField("coins");
+      JSON::Array coins(stream);
+      for (const auto &coinInfo: Server_.userManager().coinInfo()) {
+        coins.addField();
+        JSON::Object coin(stream);
+        UserSettingsRecord settings;
+        coin.addString("name", coinInfo.Name.c_str());
+        if (Server_.userManager().getUserCoinSettings(login, coinInfo.Name, settings)) {
+          coin.addString("address", settings.Address);
+          coin.addString("payoutThreshold", FormatMoney(settings.MinimalPayout, coinInfo.RationalPartSize));
+          coin.addBoolean("autoPayoutEnabled", settings.AutoPayout);
+        } else {
+          coin.addNull("address");
+          coin.addNull("payoutThreshold");
+          coin.addBoolean("autoPayoutEnabled", false);
+        }
       }
-      stream.write("}");
-      firstIteration = false;
+    } else {
+      object.addString("status", "unknown_id");
     }
-  } else {
-    jsonSerializeString(stream, "status", "unknown_id", true);
   }
 
-  stream.write("]}\n");
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }

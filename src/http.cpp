@@ -181,16 +181,25 @@ static inline void jsonParseDouble(rapidjson::Document &document, const char *na
   }
 }
 
-static inline void jsonParseIntOrDouble(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
+static inline void jsonParseNumber(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
   if (document.HasMember(name)) {
-    if (document[name].IsDouble())
+    if (document[name].IsNumber())
       *out = document[name].GetDouble();
-    else if (document[name].IsInt64())
-      *out = document[name].GetInt64();
     else
       *validAcc = false;
   } else {
     *validAcc = false;
+  }
+}
+
+static inline void jsonParseNumber(rapidjson::Document &document, const char *name, double *out, double defaultValue, bool *validAcc) {
+  if (document.HasMember(name)) {
+    if (document[name].IsNumber())
+      *out = document[name].GetDouble();
+    else
+      *validAcc = false;
+  } else {
+    *out = defaultValue;
   }
 }
 
@@ -203,14 +212,16 @@ static inline void parseUserCredentials(rapidjson::Document &document, UserManag
   jsonParseBoolean(document, "isActive", &credentials.IsActive, false, validAcc);
   jsonParseBoolean(document, "isReadOnly", &credentials.IsReadOnly, false, validAcc);
   jsonParseString(document, "parentUser", credentials.ParentUser, "", validAcc);
-  jsonParseDouble(document, "defaultFee", &credentials.DefaultFee, 0.0, validAcc);
+  jsonParseNumber(document, "defaultFee", &credentials.DefaultFee, 0.0, validAcc);
   if (document.HasMember("specificFee") && document["specificFee"].IsArray()) {
     rapidjson::Value::Array specificFee = document["specificFee"].GetArray();
     for (rapidjson::SizeType i = 0, ie = specificFee.Size(); i != ie; ++i) {
       rapidjson::Value &record = specificFee[i];
-      if (!record.HasMember("coin") && !record["coin"].IsString() &&
-          !record.HasMember("fee") && !record["fee"].IsDouble())
-        continue;
+      if (!record.HasMember("coin") || !record["coin"].IsString() ||
+          !record.HasMember("fee") || !record["fee"].IsNumber()) {
+        *validAcc = false;
+        return;
+      }
 
       auto &outRecord = credentials.SpecificFee.emplace_back();
       outRecord.CoinName = record["coin"].GetString();
@@ -1510,7 +1521,7 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff(rapidjson::Document &d
   double profitSwitchCoeff = 0.0;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "coin", coin, "", &validAcc);
-  jsonParseIntOrDouble(document, "profitSwitchCoeff", &profitSwitchCoeff, &validAcc);
+  jsonParseNumber(document, "profitSwitchCoeff", &profitSwitchCoeff, &validAcc);
 
   if (!validAcc) {
     replyWithStatus("json_format_error");

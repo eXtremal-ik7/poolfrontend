@@ -482,8 +482,10 @@ Force payout all funds from user balance
 * [required] coin:string
 
 ### return values:
-* status:string - can be one of common status values
-* result:boolean - true if payout scheduled or false if balance is less than minimal allowed payout value
+* status:string - can be one of common status values or:
+  * payout_error - can't make payout, usually address not set for requested coin
+  * insufficient_balance - user non-queued balance less than minimal allowed payout amount
+  * no_balance - no balance record found (ok for just registered users)
 
 ### curl example:
 ```
@@ -491,7 +493,7 @@ curl -X POST -d '{"id": "ae860bab2faca258c790563a5f97640e55c3c8f23df3fbfde07ed46
 ```
 ### response examples:
 ```
-{"status": "ok","result": true}
+{"status": "ok"}
 ```
 
 ## backendQueryCoins

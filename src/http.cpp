@@ -49,25 +49,6 @@ static inline bool rawcmp(Raw data, const char *operand) {
   return data.size == opSize && memcmp(data.data, operand, opSize) == 0;
 }
 
-static inline void jsonSerializeNull(xmstream &stream, const char *name, bool lastField = false)
-{
-  stream.write("\"");
-  stream.write(name);
-  stream.write("\": null");
-  if (!lastField)
-    stream.write(',');
-}
-
-static inline void jsonSerializeBoolean(xmstream &stream, const char *name, bool value, bool lastField = false)
-{
-  stream.write("\"");
-  stream.write(name);
-  stream.write("\": ");
-  stream.write(value ? "true" : "false");
-  if (!lastField)
-    stream.write(',');
-}
-
 static inline void jsonSerializeString(xmstream &stream, const char *name, const char *value, bool lastField = false)
 {
   stream.write("\"");
@@ -156,24 +137,6 @@ static inline void jsonParseBoolean(rapidjson::Document &document, const char *n
   if (document.HasMember(name)) {
     if (document[name].IsBool())
       *out = document[name].GetBool();
-    else
-      *validAcc = false;
-  } else {
-    *out = defaultValue;
-  }
-}
-
-static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
-  if (document.HasMember(name) && document[name].IsDouble())
-    *out = document[name].GetDouble();
-  else
-    *validAcc = false;
-}
-
-static inline void jsonParseDouble(rapidjson::Document &document, const char *name, double *out, double defaultValue, bool *validAcc) {
-  if (document.HasMember(name)) {
-    if (document[name].IsDouble())
-      *out = document[name].GetDouble();
     else
       *validAcc = false;
   } else {
@@ -880,18 +843,8 @@ void PoolHttpConnection::onBackendManualPayout(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->accountingDb()->manualPayout(login, [this](bool result) {
-    xmstream stream;
-    reply200(stream);
-    size_t offset = startChunk(stream);
-
-    stream.write('{');
-    jsonSerializeString(stream, "status", "ok");
-    jsonSerializeBoolean(stream, "result", result, true);
-    stream.write('}');
-
-    finishChunk(stream, offset);
-    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  backend->accountingDb()->manualPayout(login, [this](const char *status) {
+    replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
 }

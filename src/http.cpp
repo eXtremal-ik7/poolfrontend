@@ -49,30 +49,6 @@ static inline bool rawcmp(Raw data, const char *operand) {
   return data.size == opSize && memcmp(data.data, operand, opSize) == 0;
 }
 
-static inline void jsonSerializeString(xmstream &stream, const char *name, const char *value, bool lastField = false)
-{
-  stream.write("\"");
-  stream.write(name);
-  stream.write("\": \"");
-  stream.write(value);
-  stream.write("\"");
-  if (!lastField)
-    stream.write(',');
-}
-
-template<typename T>
-static inline void jsonSerializeInt(xmstream &stream, const char *name, T number, bool lastField = false)
-{
-  char N[32];
-  xitoa(number, N);
-  stream.write("\"");
-  stream.write(name);
-  stream.write("\": ");
-  stream.write(static_cast<const char*>(N));
-  if (!lastField)
-    stream.write(',');
-}
-
 static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, bool *validAcc) {
   if (document.HasMember(name) && document[name].IsString())
     out = document[name].GetString();
@@ -1218,22 +1194,27 @@ void PoolHttpConnection::onBackendQueryFoundBlocks(rapidjson::Document &document
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
-    stream.write('{');
-    jsonSerializeString(stream, "status", "ok");
-    stream.write("\"blocks\": [");
-    for (size_t i = 0, ie = blocks.size(); i != ie; ++i) {
-      if (i != 0)
-        stream.write(',');
-      stream.write('{');
-      jsonSerializeInt(stream, "height", blocks[i].Height);
-      jsonSerializeString(stream, "hash", blocks[i].Hash.c_str());
-      jsonSerializeInt(stream, "time", blocks[i].Time);
-      jsonSerializeInt(stream, "confirmations", confirmations[i].Confirmations);
-      jsonSerializeString(stream, "generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.RationalPartSize).c_str());
-      jsonSerializeString(stream, "foundBy", blocks[i].FoundBy.c_str(), true);
-      stream.write('}');
+    {
+      JSON::Object response(stream);
+      response.addString("status", "ok");
+      response.addField("blocks");
+      {
+        JSON::Array blocksArray(stream);
+        for (size_t i = 0, ie = blocks.size(); i != ie; ++i) {
+          blocksArray.addField();
+          {
+            JSON::Object block(stream);
+            block.addInt("height", blocks[i].Height);
+            block.addString("hash", blocks[i].Hash);
+            block.addInt("time", blocks[i].Time);
+            block.addInt("confirmations", confirmations[i].Confirmations);
+            block.addString("generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.RationalPartSize));
+            block.addString("foundBy", blocks[i].FoundBy);
+          }
+        }
+      }
     }
-    stream.write("]}");
+
     finishChunk(stream, offset);
     aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
@@ -1276,19 +1257,25 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write('{');
-  jsonSerializeString(stream, "status", "ok");
-  stream.write("\"payouts\": [");
-  for (size_t i = 0, ie = records.size(); i != ie; ++i) {
-    if (i != 0)
-      stream.write(',');
-    stream.write('{');
-    jsonSerializeInt(stream, "time", records[i].Time);
-    jsonSerializeString(stream, "txid", records[i].TransactionId.c_str());
-    jsonSerializeString(stream, "value", FormatMoney(records[i].Value, backend->getCoinInfo().RationalPartSize).c_str(), true);
-    stream.write('}');
+
+  {
+    JSON::Object response(stream);
+    response.addString("status", "ok");
+    response.addField("payouts");
+    {
+      JSON::Array payoutsArray(stream);
+      for (size_t i = 0, ie = records.size(); i != ie; ++i) {
+        payoutsArray.addField();
+        {
+          JSON::Object payout(stream);
+          payout.addInt("time", records[i].Time);
+          payout.addString("txid", records[i].TransactionId);
+          payout.addString("value", FormatMoney(records[i].Value, backend->getCoinInfo().RationalPartSize));
+        }
+      }
+    }
   }
-  stream.write("]}");
+
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
@@ -1650,9 +1637,12 @@ void PoolHttpConnection::replyWithStatus(const char *status)
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
-  stream.write('{');
-  jsonSerializeString(stream, "status", status, true);
-  stream.write("}\n");
+
+  {
+    JSON::Object object(stream);
+    object.addString("status", status);
+  }
+
   finishChunk(stream, offset);
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }

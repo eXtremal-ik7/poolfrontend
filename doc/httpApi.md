@@ -551,7 +551,7 @@ Function returns user balance, requested and paid values for one or all availabl
 ### return values:
 * status:string - can be one of common status values or:
   * unknown_id: invalid session id
-* balances: array of balance objects with fields 'coin', 'balance', 'requested' and 'paid'
+* balances: array of balance objects with fields 'coin', 'balance', 'requested', 'paid' and 'queued'. Field with name 'queued' contains unconfirmed user balance
 
 ### curl example:
 ```
@@ -568,29 +568,33 @@ curl -X POST -d '{"id": "7ee12d4f88c54b2a9c850f5d744c1b27cfd5bdf30892e25b197e4c0
          "coin":"XPM.testnet",
          "balance":"29.31",
          "requested":"0.00",
-         "paid":"3286.21"
+         "paid":"3286.21",
+         "queued": "0"
       }
    ]
 }
 ```
 ```
 {
-   "status":"ok",
-   "balances":[
-      {
-         "coin":"BTC",
-         "balance":"0.00",
-         "requested":"0.00",
-         "paid":"0.00"
-      },
-      {
-         "coin":"XPM.testnet",
-         "balance":"29.31",
-         "requested":"0.00",
-         "paid":"3286.21"
-      }
-   ]
+  "status": "ok",
+  "balances": [
+    {
+      "coin": "BTC.regtest",
+      "balance": "0.09613028",
+      "requested": "0",
+      "paid": "0",
+      "queued": "0.04577632"
+    },
+    {
+      "coin": "XPM",
+      "balance": "0",
+      "requested": "0",
+      "paid": "0",
+      "queued": "0"
+    }
+  ]
 }
+
 ```
 
 ## backendQueryFoundBlocks:

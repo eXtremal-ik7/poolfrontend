@@ -925,7 +925,7 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
     }
 
     objectIncrementReference(aioObjectHandle(Socket_), 1);
-    backend->accountingDb()->queryUserBalance(login, [this, backend](const UserBalanceRecord &record) {
+    backend->accountingDb()->queryUserBalance(login, [this, backend](const AccountingDb::UserBalanceInfo &record) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -940,9 +940,10 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
           {
             JSON::Object balance(stream);
             balance.addString("coin", coinInfo.Name);
-            balance.addString("balance", FormatMoney(record.Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
-            balance.addString("requested", FormatMoney(record.Requested, coinInfo.RationalPartSize));
-            balance.addString("paid", FormatMoney(record.Paid, coinInfo.RationalPartSize));
+            balance.addString("balance", FormatMoney(record.Data.Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
+            balance.addString("requested", FormatMoney(record.Data.Requested, coinInfo.RationalPartSize));
+            balance.addString("paid", FormatMoney(record.Data.Paid, coinInfo.RationalPartSize));
+            balance.addString("queued", FormatMoney(record.Queued, coinInfo.RationalPartSize));
           }
         }
       }
@@ -959,7 +960,7 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
     for (size_t i = 0, ie = Server_.backends().size(); i != ie; ++i)
       accountingDbs[i] = Server_.backend(i)->accountingDb();
 
-    AccountingDb::queryUserBalanceMulti(&accountingDbs[0], accountingDbs.size(), login, [this](const UserBalanceRecord *balanceData, size_t backendsNum) {
+    AccountingDb::queryUserBalanceMulti(&accountingDbs[0], accountingDbs.size(), login, [this](const AccountingDb::UserBalanceInfo *balanceData, size_t backendsNum) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -975,11 +976,11 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
             {
               JSON::Object balance(stream);
               balance.addString("coin", coinInfo.Name);
-              balance.addString("balance", FormatMoney(balanceData[i].Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
-              balance.addString("requested", FormatMoney(balanceData[i].Requested, coinInfo.RationalPartSize));
-              balance.addString("paid", FormatMoney(balanceData[i].Paid, coinInfo.RationalPartSize));
+              balance.addString("balance", FormatMoney(balanceData[i].Data.Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
+              balance.addString("requested", FormatMoney(balanceData[i].Data.Requested, coinInfo.RationalPartSize));
+              balance.addString("paid", FormatMoney(balanceData[i].Data.Paid, coinInfo.RationalPartSize));
+              balance.addString("queued", FormatMoney(balanceData[i].Queued, coinInfo.RationalPartSize));
             }
-
           }
         }
       }

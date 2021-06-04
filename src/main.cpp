@@ -328,15 +328,9 @@ int main(int argc, char *argv[])
     poolContext.Instances.resize(config.Instances.size());
     for (size_t instIdx = 0, instIdxE = config.Instances.size(); instIdx != instIdxE; ++instIdx) {
       CInstanceConfig &instanceConfig = config.Instances[instIdx];
-      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig);
-      if (!instance) {
-        LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
-        return 1;
-      }
+      std::vector<PoolBackend*> linkedBackends;
 
-      instance->setComplexMiningStats(poolContext.MiningStats.get());
-
-      std::string algo;
+      // Get linked backends
       for (const auto &linkedCoinName: instanceConfig.Backends) {
         auto It = std::lower_bound(poolContext.Backends.begin(), poolContext.Backends.end(), linkedCoinName, [](const auto &backend, const std::string &name) { return backend->getCoinInfo().Name < name; });
         if (It == poolContext.Backends.end() || (*It)->getCoinInfo().Name != linkedCoinName) {
@@ -344,7 +338,19 @@ int main(int argc, char *argv[])
           return 1;
         }
 
-        PoolBackend *linkedBackend = It->get();
+        linkedBackends.push_back(It->get());
+      }
+
+
+      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, linkedBackends, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig);
+      if (!instance) {
+        LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
+        return 1;
+      }
+      instance->setComplexMiningStats(poolContext.MiningStats.get());
+
+      std::string algo;
+      for (PoolBackend *linkedBackend: linkedBackends) {
         if (!algo.empty() && linkedBackend->getCoinInfo().Algorithm != algo) {
           LOG_F(ERROR, "Linked backends with different algorithms (%s and %s) to one instance %s", algo.c_str(), linkedBackend->getCoinInfo().Algorithm.c_str(), instanceConfig.Name.c_str());
           return 1;

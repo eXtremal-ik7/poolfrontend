@@ -23,7 +23,10 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userUpdateCredentials", {hmPost, fnUserUpdateCredentials}},
   {"userUpdateSettings", {hmPost, fnUserUpdateSettings}},
   {"userEnumerateAll", {hmPost, fnUserEnumerateAll}},
-  {"userUpdatePersonalFee", {hmPost, fnUserUpdatePersonalFee}},
+  {"userEnumerateFeePlan", {hmPost, fnUserEnumerateFeePlan}},
+  {"userGetFeePlan", {hmPost, fnUserGetFeePlan}},
+  {"userUpdateFeePlan", {hmPost, fnUserUpdateFeePlan}},
+  {"userChangeFeePlan", {hmPost, fnUserChangeFeePlan}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
   {"backendQueryCoins", {hmPost, fnBackendQueryCoins}},
@@ -49,14 +52,14 @@ static inline bool rawcmp(Raw data, const char *operand) {
   return data.size == opSize && memcmp(data.data, operand, opSize) == 0;
 }
 
-static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, bool *validAcc) {
+static inline void jsonParseString(rapidjson::Value &document, const char *name, std::string &out, bool *validAcc) {
   if (document.HasMember(name) && document[name].IsString())
     out = document[name].GetString();
   else
     *validAcc = false;
 }
 
-static inline void jsonParseString(rapidjson::Document &document, const char *name, std::string &out, const std::string &defaultValue, bool *validAcc) {
+static inline void jsonParseString(rapidjson::Value &document, const char *name, std::string &out, const std::string &defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsString())
       out = document[name].GetString();
@@ -68,7 +71,7 @@ static inline void jsonParseString(rapidjson::Document &document, const char *na
 }
 
 
-static inline void jsonParseInt64(rapidjson::Document &document, const char *name, int64_t *out, int64_t defaultValue, bool *validAcc) {
+static inline void jsonParseInt64(rapidjson::Value &document, const char *name, int64_t *out, int64_t defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsInt64())
       *out = document[name].GetInt64();
@@ -80,7 +83,7 @@ static inline void jsonParseInt64(rapidjson::Document &document, const char *nam
 }
 
 
-static inline void jsonParseUInt64(rapidjson::Document &document, const char *name, uint64_t *out, int64_t defaultValue, bool *validAcc) {
+static inline void jsonParseUInt64(rapidjson::Value &document, const char *name, uint64_t *out, int64_t defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsUint64())
       *out = document[name].GetUint64();
@@ -91,7 +94,7 @@ static inline void jsonParseUInt64(rapidjson::Document &document, const char *na
   }
 }
 
-static inline void jsonParseUInt(rapidjson::Document &document, const char *name, unsigned *out, unsigned defaultValue, bool *validAcc) {
+static inline void jsonParseUInt(rapidjson::Value &document, const char *name, unsigned *out, unsigned defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsUint())
       *out = document[name].GetUint();
@@ -102,14 +105,14 @@ static inline void jsonParseUInt(rapidjson::Document &document, const char *name
   }
 }
 
-static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool *validAcc) {
+static inline void jsonParseBoolean(rapidjson::Value &document, const char *name, bool *out, bool *validAcc) {
   if (document.HasMember(name) && document[name].IsBool())
     *out = document[name].GetBool();
   else
     *validAcc = false;
 }
 
-static inline void jsonParseBoolean(rapidjson::Document &document, const char *name, bool *out, bool defaultValue, bool *validAcc) {
+static inline void jsonParseBoolean(rapidjson::Value &document, const char *name, bool *out, bool defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsBool())
       *out = document[name].GetBool();
@@ -120,7 +123,7 @@ static inline void jsonParseBoolean(rapidjson::Document &document, const char *n
   }
 }
 
-static inline void jsonParseNumber(rapidjson::Document &document, const char *name, double *out, bool *validAcc) {
+static inline void jsonParseNumber(rapidjson::Value &document, const char *name, double *out, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsNumber())
       *out = document[name].GetDouble();
@@ -131,7 +134,7 @@ static inline void jsonParseNumber(rapidjson::Document &document, const char *na
   }
 }
 
-static inline void jsonParseNumber(rapidjson::Document &document, const char *name, double *out, double defaultValue, bool *validAcc) {
+static inline void jsonParseNumber(rapidjson::Value &document, const char *name, double *out, double defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsNumber())
       *out = document[name].GetDouble();
@@ -142,7 +145,7 @@ static inline void jsonParseNumber(rapidjson::Document &document, const char *na
   }
 }
 
-static inline void parseUserCredentials(rapidjson::Document &document, UserManager::Credentials &credentials, bool *validAcc)
+static inline void parseUserCredentials(rapidjson::Value &document, UserManager::Credentials &credentials, bool *validAcc)
 {
   jsonParseString(document, "login", credentials.Login, "", validAcc);
   jsonParseString(document, "password", credentials.Password, "", validAcc);
@@ -150,21 +153,37 @@ static inline void parseUserCredentials(rapidjson::Document &document, UserManag
   jsonParseString(document, "email", credentials.EMail, "", validAcc);
   jsonParseBoolean(document, "isActive", &credentials.IsActive, false, validAcc);
   jsonParseBoolean(document, "isReadOnly", &credentials.IsReadOnly, false, validAcc);
-  jsonParseString(document, "parentUser", credentials.ParentUser, "", validAcc);
-  jsonParseNumber(document, "defaultFee", &credentials.DefaultFee, 0.0, validAcc);
-  if (document.HasMember("specificFee") && document["specificFee"].IsArray()) {
-    rapidjson::Value::Array specificFee = document["specificFee"].GetArray();
-    for (rapidjson::SizeType i = 0, ie = specificFee.Size(); i != ie; ++i) {
-      rapidjson::Value &record = specificFee[i];
-      if (!record.HasMember("coin") || !record["coin"].IsString() ||
-          !record.HasMember("fee") || !record["fee"].IsNumber()) {
-        *validAcc = false;
-        return;
-      }
+  jsonParseString(document, "feePlan", credentials.FeePlan, "", validAcc);
+}
 
-      auto &outRecord = credentials.SpecificFee.emplace_back();
-      outRecord.CoinName = record["coin"].GetString();
-      outRecord.Fee = record["fee"].GetDouble();
+static void addUserFeeConfig(xmstream &stream, const UserFeeConfig &config)
+{
+  JSON::Array cfg(stream);
+  for (const auto &pair: config) {
+    cfg.addField();
+    JSON::Object pairObject(stream);
+    pairObject.addString("userId", pair.UserId);
+    pairObject.addDouble("percentage", pair.Percentage);
+  }
+}
+
+static void addUserFeePlan(xmstream &stream, const UserFeePlanRecord &plan)
+{
+  JSON::Object result(stream);
+  result.addString("feePlanId", plan.FeePlanId);
+  result.addField("default");
+    addUserFeeConfig(stream, plan.Default);
+  result.addField("coinSpecificFee");
+  {
+    JSON::Array coinSpecificFee(stream);
+    for (const auto &specificFee: plan.CoinSpecificFee) {
+      {
+        coinSpecificFee.addField();
+        JSON::Object coin(stream);
+        coin.addString("coin", specificFee.CoinName);
+        coin.addField("config");
+          addUserFeeConfig(stream, specificFee.Config);
+      }
     }
   }
 }
@@ -227,7 +246,10 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserUpdateCredentials: onUserUpdateCredentials(document); break;
       case fnUserUpdateSettings: onUserUpdateSettings(document); break;
       case fnUserEnumerateAll: onUserEnumerateAll(document); break;
-      case fnUserUpdatePersonalFee: onUserUpdatePersonalFee(document); break;
+      case fnUserEnumerateFeePlan: onUserEnumerateFeePlan(document); break;
+      case fnUserGetFeePlan: onUserGetFeePlan(document); break;
+      case fnUserUpdateFeePlan: onUserUpdateFeePlan(document); break;
+      case fnUserChangeFeePlan: onUserChangeFeePlan(document); break;
       case fnBackendManualPayout: onBackendManualPayout(document); break;
       case fnBackendQueryUserBalance: onBackendQueryUserBalance(document); break;
       case fnBackendQueryUserStats: onBackendQueryUserStats(document); break;
@@ -679,8 +701,8 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
   bool validAcc = true;
   std::string sessionId;
   std::string coin;
-  uint64_t offset;
-  uint64_t size;
+  uint64_t offset = 0;
+  uint64_t size = 0;
   std::string sortBy;
   bool sortDescending;
 
@@ -743,18 +765,7 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
               userObject.addInt("registrationDate", user.Credentials.RegistrationDate);
               userObject.addBoolean("isActive", user.Credentials.IsActive);
               userObject.addBoolean("isReadOnly", user.Credentials.IsReadOnly);
-              userObject.addString("parentUser", user.Credentials.ParentUser);
-              userObject.addDouble("defaultFee", user.Credentials.DefaultFee);
-              userObject.addField("specificFee");
-              {
-                JSON::Array specificFeeArray(stream);
-                for (const auto &specificFee: user.Credentials.SpecificFee) {
-                  specificFeeArray.addField();
-                  JSON::Object specificFeeRecord(stream);
-                  specificFeeRecord.addString("coin", specificFee.CoinName);
-                  specificFeeRecord.addDouble("fee", specificFee.Fee);
-                }
-              }
+              userObject.addString("feePlanId", user.Credentials.FeePlan);
               userObject.addInt("workers", user.WorkersNum);
               userObject.addDouble("shareRate", user.SharesPerSecond);
               userObject.addInt("power", user.AveragePower);
@@ -772,20 +783,154 @@ void PoolHttpConnection::onUserEnumerateAll(rapidjson::Document &document)
   });
 }
 
-void PoolHttpConnection::onUserUpdatePersonalFee(rapidjson::Document &document)
+void PoolHttpConnection::onUserUpdateFeePlan(rapidjson::Document &document)
 {
   bool validAcc = true;
   std::string sessionId;
-  UserManager::Credentials credentials;
+  UserFeePlanRecord record;
+
+  auto jsonParseUserFeeConfig = [](rapidjson::Value &value, const char *fieldName, UserFeeConfig &config, bool *validAcc) {
+    if (!value.HasMember(fieldName) || !value[fieldName].IsArray()) {
+      *validAcc = false;
+      return;
+    }
+
+    rapidjson::Value::Array pairs = value[fieldName].GetArray();
+    for (rapidjson::SizeType i = 0, ie = pairs.Size(); i != ie; ++i) {
+      if (!pairs[i].IsObject()) {
+        *validAcc = false;
+        return;
+      }
+
+      config.emplace_back();
+      jsonParseString(pairs[i], "userId", config.back().UserId, validAcc);
+      jsonParseNumber(pairs[i], "percentage", &config.back().Percentage, validAcc);
+    }
+  };
+
   jsonParseString(document, "id", sessionId, &validAcc);
-  parseUserCredentials(document, credentials, &validAcc);
-  if (!validAcc || credentials.ParentUser.empty()) {
+  jsonParseString(document, "feePlanId", record.FeePlanId, &validAcc);
+  jsonParseUserFeeConfig(document, "default", record.Default, &validAcc);
+  if (document.HasMember("coinSpecificFee") && document["coinSpecificFee"].IsArray()) {
+    rapidjson::Value::Array coinSpecificFee = document["coinSpecificFee"].GetArray();
+    for (rapidjson::SizeType i = 0, ie = coinSpecificFee.Size(); i != ie; ++i) {
+      if (!coinSpecificFee[i].IsObject()) {
+        validAcc = false;
+        break;
+      }
+
+      record.CoinSpecificFee.emplace_back();
+      jsonParseString(coinSpecificFee[i], "coin", record.CoinSpecificFee.back().CoinName, &validAcc);
+      jsonParseUserFeeConfig(coinSpecificFee[i], "config", record.CoinSpecificFee.back().Config, &validAcc);
+    }
+  }
+
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  // Check coin
+  for (const auto &specificFee: record.CoinSpecificFee) {
+    if (!Server_.backend(specificFee.CoinName)) {
+      replyWithStatus("invalid_coin");
+      return;
+    }
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().updateFeePlan(sessionId, std::move(record), [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
+void PoolHttpConnection::onUserEnumerateFeePlan(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string status;
+  std::vector<UserFeePlanRecord> result;
+  if (Server_.userManager().enumerateFeePlan(sessionId, status, result)) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    {
+      JSON::Object answer(stream);
+      answer.addString("status", "ok");
+      answer.addField("plans");
+      {
+        JSON::Array plans(stream);
+        for (const auto &plan: result) {
+          plans.addField();
+          addUserFeePlan(stream, plan);
+        }
+      }
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  } else {
+    replyWithStatus(status.c_str());
+  }
+}
+
+void PoolHttpConnection::onUserGetFeePlan(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  std::string feePlanId;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "feePlanId", feePlanId, &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string status;
+  UserFeePlanRecord result;
+  if (Server_.userManager().getFeePlan(sessionId, feePlanId, status, result)) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    {
+      JSON::Object answer(stream);
+      answer.addString("status", "ok");
+      answer.addField("plan");
+      addUserFeePlan(stream, result);
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+  } else {
+    replyWithStatus(status.c_str());
+  }
+}
+
+void PoolHttpConnection::onUserChangeFeePlan(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  std::string targetLogin;
+  std::string feePlanId;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, &validAcc);
+  jsonParseString(document, "feePlanId", feePlanId, &validAcc);
+  if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().updatePersonalFee(sessionId, std::move(credentials), [this](const char *status) {
+  Server_.userManager().changeFeePlan(sessionId, targetLogin, feePlanId, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
@@ -927,8 +1072,8 @@ void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
-  uint64_t offset;
-  uint64_t size;
+  uint64_t offset = 0;
+  uint64_t size = 0;
   std::string sortBy;
   bool sortDescending;
   jsonParseString(document, "id", sessionId, &validAcc);
@@ -1227,7 +1372,7 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
   std::string sessionId;
   std::string targetLogin;
   std::string coin;
-  uint64_t timeFrom;
+  uint64_t timeFrom = 0;
   unsigned count;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);

@@ -153,7 +153,7 @@ static inline void parseUserCredentials(rapidjson::Value &document, UserManager:
   jsonParseString(document, "email", credentials.EMail, "", validAcc);
   jsonParseBoolean(document, "isActive", &credentials.IsActive, false, validAcc);
   jsonParseBoolean(document, "isReadOnly", &credentials.IsReadOnly, false, validAcc);
-  jsonParseString(document, "feePlan", credentials.FeePlan, "", validAcc);
+  jsonParseString(document, "feePlanId", credentials.FeePlan, "", validAcc);
 }
 
 static void addUserFeeConfig(xmstream &stream, const UserFeeConfig &config)

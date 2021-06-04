@@ -15,7 +15,10 @@
    * [userGetSettings](#usergetsettings)
    * [userUpdateSettings](#userupdatesettings)
    * [userEnumerateAll](#userenumerateall)
-   * [userUpdatePersonalFee](#userupdatepersonalfee)
+   * [userEnumerateFeePlan](#userenumeratefeeplan)
+   * [userGetFeePlan](#usergetfeeplan)
+   * [userUpdateFeePlan](#userupdatefeeplan)
+   * [userChangeFeePlan](#userchangefeeplan)
 * [Backend API functions](#backend-api-functions)
    * [backendManualPayout](#backendmanualpayout)
    * [backendQueryCoins](#backendquerycoins)
@@ -114,14 +117,7 @@ Pool frontend must have a handler for configured activation link fornat.
 * [optional] isActive:boolean - if true, function will create activated user (option available for admin account only)
 * [optional] isReadOnly:boolean - if true, user will have no write access to his account (option available for admin account only)
 * [optional] id:string - unique user session id returned by userlogin function, only admin session is usable
-* [optional] parentUser:string - parent user for personal fee. if this argument not empty, caller must be a /parentUser/ ('id' argument is a token returned by 'userLogin' function for /parentUser/) or admin
-* [optional] defaultFee:double - default fee coefficient (range [0, 1])
-* [optional] specificFee:[SpecificFee] - array of individual coin settings
-
-### data structures
-* SpecificFee:
-  * [required] coin:string - coin name
-  * [required] fee:double - fee coefficient (range [0, 1])
+* [optional] feePlanId:string - fee plan for user (option available for admin account only)
 
 ### return values:
 * status:string - can be one of common status values or:
@@ -133,14 +129,14 @@ Pool frontend must have a handler for configured activation link fornat.
   * duplicate_login: already have user with requested login
   * smtp_client_create_error: internal error with SMTP protocol client
   * email_send_error: error received from SMTP server, details in pool log
-  * parent_select_not_allowed: you can create user with personal fee setted to you only (or you need to be admin)
-  * parent_not_exists: parentUser argument points to non-existent user
+  * fee_plan_not_allowed: setup fee plan available only from admin account
+  * fee_plan_not_exists: non-existent fee plan sent
 
 ### curl example:
 ```
 curl -X POST -d '{"login": "user", "password": "12345678", "email": "my@email.com"}' http://localhost:18880/api/userCreate
 curl -X POST -d '{"login": "ro", "password": "12345678", "isActive": true, "isReadOnly": true, "id": "aa342d65135cfb6485c8ca52bacd774418fd1a76fbce5a418ae607a4471c9de0a52e46f36d2b5d1645f83598e34fed7e2750772080122fdaf92becf5e60ed058"}' http://localhost:18880/api/userCreate
-curl -X POST -d '{"login": "user10", "password": "12345678", "email": "user10@mail.none", "isActive": true, "isReadOnly": false, "id": "31a705754f8115d08018652553cccf38dfbabe219ba2c02ea137b1d391149c96e35f18a8abd0e8f67e4dea73808e610ee359bb359a5c9335b1806f97fe33092c", "parentUser": "user1", "defaultFee": 0.5, "specificFee": [{"coin": "BTC.regtest", "fee": 0.5}]} ' http://localhost:18880/api/userCreate
+curl -X POST -d '{"login": "miner3", "password": "12345678", "email": "miner3@mail.none", "id": "c5a192d62871086fb72bcf736683e0610c486121aeaffb35193af2d63d2144aa8b85a4c56038678de3d8d7c47727e9616d950574dd9b2324e16b49dbeb9f02ad", "feePlanId": "special"}' http://localhost:18880/api/userCreate
 ```
 
 ### response examples:
@@ -401,18 +397,11 @@ Returns all registered users for admin/observer account or all 'child' users wit
   * name:string
   * email:string
   * registrationDate:integer - uses unix time format
-  * parentUser:string - parent user for personal fee (empty string if not set)
-  * defaultFee:double - default personal fee to parent user
-  * specificFee:[SpecificFee]
+  * feePlanId:string - fee plan for user
   * workers:integer - number of connections for current user in last N minutes
   * shareRate:float - shares per second
   * power:integer - usually hashrate, depends on coin type
   * lastShareTime:integer - time of last received shared by user
-  
-### data structures
-* SpecificFee:
-  * [required] coin:string - coin name
-  * [required] fee:double - fee coefficient (range [0, 1])
 
 ### curl example:
 ```
@@ -422,52 +411,188 @@ curl -X POST -d '{"id": "c26411c326d0e62d02cb0d1614a37eac4e3b848fb37eb7a46f3a2dd
 ### response examples:
 ```
 {
-   "status":"ok",
-   "users":[
-      {
-         "login":"X2",
-         "name":"X2",
-         "email":"my@email.com",
-         "registrationDate":1602930401,
-         "workers":0,
-         "shareRate":0.026,
-         "power":11,
-         "lastShareTime":1603323197
-      }
-   ]
+  "status": "ok",
+  "users": [
+    {
+      "login": "miner3",
+      "name": "miner3",
+      "email": "miner3@mail.none",
+      "registrationDate": 1622841331,
+      "isActive": false,
+      "isReadOnly": false,
+      "feePlanId": "special",
+      "workers": 0,
+      "shareRate": 0.0,
+      "power": 0,
+      "lastShareTime": 0
+    }
+  ]
 }
 ```
 
-## userUpdatePersonalFee
-Update personal fee settings for specified user (for admin account only)
+## userEnumerateFeePlan
+Returns all existing fee plans (for admin account only)
 
 ### arguments:
 * [required] id:string - unique identifier of operation generated by another api function
-* [required] login:string
-* [required] parentUser:string - parent user for personal fee.
-* [required] defaultFee:double - default fee coefficient (range [0, 1])
-* [optional] specificFee:[SpecificFee] - array of individual coin settings
-
-### data structures
-* SpecificFee:
-  * [required] coin:string - coin name
-  * [required] fee:double - fee coefficient (range [0, 1])
 
 ### return values:
 * status:string - can be one of common status values or:
-  * unknown_login - user with specified login does not exists
-  * parent_not_exists - user 'parentUser' does not exists
-  * personal_fee_loop_detected - can't update personal fee tree due to loop detected
-  
+  * unknown_id: invalid session id
+* plans:[Plan] - array of fee plan object
+
 ### curl example:
 ```
-curl -X POST -d '{"id": "99a8be377b8d8c95845624ac6c1da7bc97e5e8d4a0b27ef5668bda114e3c89d9df42b3148cfe11eb88403e527b6962d833c15b14dc1bb3fbad20ec15262a62da", "login": "user3", "parentUser": "user1", "defaultFee": 0.33}' http://localhost:18880/api/userUpdatePersonalFee
-curl -X POST -d '{"id": "10e56e632270e9b289491923a3bec8eb9e7b1d8ef698b9013159f1471166d86a126d2a633577654a979d9b5e2ea27752166107ca89bdaf39688f2e149e1a67cc", "login": "user3", "parentUser": "user2", "defaultFee": 0.1, "specificFee": [{"coin": "BTC.regtest", "fee": 0.5}, {"coin": "HTR", "fee": 0.1}]}' http://localhost:18880/api/userUpdatePersonalFee
+curl -X POST -d '{"id": "c5a192d62871086fb72bcf736683e0610c486121aeaffb35193af2d63d2144aa8b85a4c56038678de3d8d7c47727e9616d950574dd9b2324e16b49dbeb9f02ad"}' http://localhost:18880/api/userEnumerateFeePlan
 ```
 
 ### response examples:
 ```
-{"status": "ok"}
+{
+  "status": "ok",
+  "plans": [
+    {
+      "feePlanId": "default",
+      "default": [
+        {
+          "userId": "adm1",
+          "percentage": 4.0
+        },
+        {
+          "userId": "adm2",
+          "percentage": 4.0
+        }
+      ],
+      "coinSpecificFee": []
+    },
+    {
+      "feePlanId": "special",
+      "default": [
+        {
+          "userId": "adm1",
+          "percentage": 1.0
+        },
+        {
+          "userId": "adm2",
+          "percentage": 1.0
+        },
+        {
+          "userId": "adm3",
+          "percentage": 1.0
+        }
+      ],
+      "coinSpecificFee": [
+        {
+          "coin": "LTC.regtest",
+          "config": [
+            {
+              "userId": "adm1",
+              "percentage": 10.0
+            },
+            {
+              "userId": "adm2",
+              "percentage": 10.0
+            },
+            {
+              "userId": "adm3",
+              "percentage": 10.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+```
+
+## userGetFeePlan
+Returns fee plan object by id (for admin account only)
+
+### arguments:
+* [required] id:string - unique identifier of operation generated by another api function
+* [required] feePlanId:string - unique fee plan identifier
+
+### return values:
+* status:string - can be one of common status values or:
+  * unknown_id: invalid session id
+  * unknown_fee_plan: non-existent fee plan requested
+* plan:Plan - fee plan object
+
+### curl example:
+```
+curl -X POST -d '{"id": "c5a192d62871086fb72bcf736683e0610c486121aeaffb35193af2d63d2144aa8b85a4c56038678de3d8d7c47727e9616d950574dd9b2324e16b49dbeb9f02ad", "feePlanId": "default"}' http://localhost:18880/api/userGetFeePlan
+```
+### response examples:
+```
+{
+  "status": "ok",
+  "plan": {
+    "feePlanId": "default",
+    "default": [
+      {
+        "userId": "adm1",
+        "percentage": 4.0
+      },
+      {
+        "userId": "adm2",
+        "percentage": 4.0
+      }
+    ],
+    "coinSpecificFee": []
+  }
+}
+```
+
+## userUpdateFeePlan
+Create new fee plan or update existing (for admin account only)
+
+### arguments:
+* [required] id:string - unique identifier of operation generated by another api function
+* [required] feePlanId:string - unique fee plan identifier
+* [required] default:[UserFeePair] - list of pair {userId:string, percentage:double}, applied for all coins by default, if coinSpecificFee not setted
+* [optional] coinSpecificFee:[CoinSpecificFeeRecord] - list or pair {coin:string, config:[UserFeePair]} - overwrites default settings for specified coin
+
+### return values:
+* status:string - can be one of common status values or:
+  * unknown_id: invalid session id
+  * invalid_coin: coin does not exist
+
+### curl example:
+```
+curl -X POST -d '{"id": "c5a192d62871086fb72bcf736683e0610c486121aeaffb35193af2d63d2144aa8b85a4c56038678de3d8d7c47727e9616d950574dd9b2324e16b49dbeb9f02ad", "feePlanId": "special", "default": [{"userId": "adm1", "percentage": 1.0}, {"userId": "adm2", "percentage": 1.0}, {"userId": "adm3", "percentage": 1.0}], "coinSpecificFee": [{"coin": "LTC.regtest", "config": [{"userId": "adm1", "percentage": 10}, {"userId": "adm2", "percentage": 10}, {"userId": "adm3", "percentage": 10}]}]}' http://localhost:18880/api/userUpdateFeePlan
+```
+
+### response examples:
+```
+{
+  "status": "ok"
+}
+```
+
+## userChangeFeePlan
+Change fee plan for specified user (for admin account only)
+
+### arguments:
+* [required] id:string - unique identifier of operation generated by another api function
+* [optional] targetLogin:string - various user login (only for admin session id)
+* [required] feePlanId:string - unique fee plan identifier
+
+### return values:
+* status:string - can be one of common status values or:
+  * unknown_id: invalid session id
+  * fee_plan_not_exists: non-existent fee plan sent
+
+### curl example:
+```
+curl -X POST -d '{"id": "c5a192d62871086fb72bcf736683e0610c486121aeaffb35193af2d63d2144aa8b85a4c56038678de3d8d7c47727e9616d950574dd9b2324e16b49dbeb9f02ad", "targetLogin": "adm1", "feePlanId": "special"}' http://localhost:18880/api/userChangeFeePlan
+```
+
+### response examples:
+```
+{
+  "status": "ok"
+}
 ```
 
 # Backend API functions

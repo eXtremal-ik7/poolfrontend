@@ -31,7 +31,7 @@ static option cmdLineOpts[] = {
   {nullptr, 0, nullptr, 0}
 };
 
-struct Context {
+struct CContext {
   asyncBase *Base;
   std::unique_ptr<CNetworkClient> Client;
   CCoinInfo CoinInfo;
@@ -39,7 +39,7 @@ struct Context {
   size_t ArgsNum;
 };
 
-void getBalanceCoro(Context *context)
+void getBalanceCoro(CContext *context)
 {
   CNetworkClient::GetBalanceResult result;
   if (context->Client->ioGetBalance(context->Base, result)) {
@@ -49,7 +49,7 @@ void getBalanceCoro(Context *context)
   }
 }
 
-void buildTransactionCoro(Context *context)
+void buildTransactionCoro(CContext *context)
 {
   if (context->ArgsNum != 3) {
     LOG_F(INFO, "Usage: buildTransaction <address> <change_address> <amount>");
@@ -90,7 +90,7 @@ void buildTransactionCoro(Context *context)
   LOG_F(INFO, "fee: %s", FormatMoney(transaction.Fee, context->CoinInfo.RationalPartSize).c_str());
 }
 
-void sendTransactionCoro(Context *context)
+void sendTransactionCoro(CContext *context)
 {
   if (context->ArgsNum != 1) {
     LOG_F(INFO, "Usage: sendTransaction <txdata>");
@@ -114,7 +114,7 @@ void sendTransactionCoro(Context *context)
   LOG_F(INFO, "sending ok");
 }
 
-void getTxConfirmationsCoro(Context *context)
+void getTxConfirmationsCoro(CContext *context)
 {
   if (context->ArgsNum != 1) {
     LOG_F(INFO, "Usage: getTxConfirmations <txid>");
@@ -138,7 +138,7 @@ void getTxConfirmationsCoro(Context *context)
   LOG_F(INFO, "Confirmations: %" PRIi64 "", confirmations);
 }
 
-void getBlockConfirmationCoro(Context *context)
+void getBlockConfirmationCoro(CContext *context)
 {
   if (context->ArgsNum != 2) {
     LOG_F(INFO, "Usage: getBlockConfirmation <hash> <height>");
@@ -232,7 +232,7 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  Context context;
+  CContext context;
   initializeSocketSubsystem();
   context.Base = createAsyncBase(amOSDefault);
   context.Argv = argv + optind;
@@ -258,28 +258,28 @@ int main(int argc, char **argv)
 
   if (method == "getBalance") {
     coroutineCall(coroutineNew([](void *arg) {
-      getBalanceCoro(static_cast<Context*>(arg));
-      postQuitOperation(static_cast<Context*>(arg)->Base);
+      getBalanceCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else if (method == "buildTransaction") {
     coroutineCall(coroutineNew([](void *arg) {
-      buildTransactionCoro(static_cast<Context*>(arg));
-      postQuitOperation(static_cast<Context*>(arg)->Base);
+      buildTransactionCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else if (method == "sendTransaction") {
     coroutineCall(coroutineNew([](void *arg) {
-      sendTransactionCoro(static_cast<Context*>(arg));
-      postQuitOperation(static_cast<Context*>(arg)->Base);
+      sendTransactionCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else if (method == "getTxConfirmations") {
     coroutineCall(coroutineNew([](void *arg) {
-      getTxConfirmationsCoro(static_cast<Context*>(arg));
-      postQuitOperation(static_cast<Context*>(arg)->Base);
+      getTxConfirmationsCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else if (method == "getBlockConfirmation") {
     coroutineCall(coroutineNew([](void *arg) {
-      getBlockConfirmationCoro(static_cast<Context*>(arg));
-      postQuitOperation(static_cast<Context*>(arg)->Base);
+      getBlockConfirmationCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else {
     LOG_F(ERROR, "Unknown method: %s", method.c_str());

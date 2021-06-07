@@ -5,7 +5,7 @@ HunterGate(
 )
 
 cmake_minimum_required(VERSION 3.11)
-project(poolfrontend)
+project(hathorpool)
 
 set (CMAKE_CXX_STANDARD 20)
 option(SANITIZER_ENABLED "Build with address sanitizer" OFF)
@@ -81,7 +81,7 @@ set(LIBRARIES
 if (WIN32)
   set(LIBRARIES ${LIBRARIES} ws2_32 mswsock)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(LIBRARIES ${LIBRARIES} dl)
+  set(LIBRARIES ${LIBRARIES} dl jemalloc)
 endif()
 
 # Compiler-specific configuration

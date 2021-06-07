@@ -23,8 +23,21 @@
 #include <netdb.h>
 #endif
 
+#if defined(OS_LINUX)
+extern "C" int mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+#endif
+
 static int interrupted = 0;
+static int sigusrReceived = 0;
 static void sigIntHandler(int) { interrupted = 1; }
+static void sigUsrHandler(int) { sigusrReceived = 1; }
+
+static void processSigUsr()
+{
+#if defined(OS_LINUX)
+  mallctl("prof.dump", NULL, NULL, NULL, 0);
+#endif
+}
 
 struct PoolContext {
   bool IsMaster;
@@ -347,6 +360,7 @@ int main(int argc, char *argv[])
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;
       }
+
       instance->setComplexMiningStats(poolContext.MiningStats.get());
 
       std::string algo;
@@ -402,11 +416,17 @@ int main(int argc, char *argv[])
   // Handle CTRL+C (SIGINT)
   signal(SIGINT, sigIntHandler);
   signal(SIGTERM, sigIntHandler);
+  signal(SIGUSR1, sigUsrHandler);
 
   std::thread sigIntThread([&monitorBase, &poolContext]() {
     loguru::set_thread_name("sigint_monitor");
-    while (!interrupted)
+    while (!interrupted) {
+      if (sigusrReceived) {
+        processSigUsr();
+        sigusrReceived = 0;
+      }
       std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
     LOG_F(INFO, "Interrupted by user");
     // Stop HTTP server
     poolContext.HttpServer->stop();

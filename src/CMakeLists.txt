@@ -43,6 +43,7 @@ endif(MSVC)
 
 include(${CMAKE_SOURCE_DIR}/cmake/ProjectPoolcore.cmake)
 
+find_package(libsodium CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(RapidJSON CONFIG REQUIRED)
 find_package(RocksDB CONFIG REQUIRED)
@@ -70,6 +71,7 @@ set(LIBRARIES
   asyncio-0.5
   asyncioextras-0.5
   p2putils
+  libsodium::libsodium
   RapidJSON::rapidjson
   OpenSSL::SSL
   OpenSSL::Crypto

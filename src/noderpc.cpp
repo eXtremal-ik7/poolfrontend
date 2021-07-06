@@ -159,6 +159,76 @@ void getBlockConfirmationCoro(CContext *context)
   }
 }
 
+void listUnspentCoro(CContext *context)
+{
+  if (context->ArgsNum != 0) {
+    LOG_F(INFO, "Usage: listUnspent");
+    return;
+  }
+
+  CNetworkClient::ListUnspentResult unspent;
+  CNetworkClient::EOperationStatus status = context->Client->ioListUnspent(context->Base, unspent);
+  if (status == CNetworkClient::EStatusOk) {
+    LOG_F(INFO, "Unspent outputs:");
+    for (const auto &output: unspent.Outs) {
+      LOG_F(INFO, "%s: %s; isCoinbase: %s", output.Address.c_str(), FormatMoney(output.Amount, context->CoinInfo.RationalPartSize).c_str(), output.IsCoinbase ? "yes" : "no");
+    }
+  } else {
+    LOG_F(ERROR, "listUnspent error %u", status);
+  }
+}
+
+void zsendManyCoro(CContext *context)
+{
+  if (context->ArgsNum != 6) {
+    LOG_F(INFO, "Usage: zsendMany <source> <destination> <amount> <memo> <minconf> <fee>");
+    return;
+  }
+
+  const char *source = context->Argv[0];
+  const char *destination = context->Argv[1];
+
+  int64_t amount;
+  if (!parseMoneyValue(context->Argv[2], context->CoinInfo.RationalPartSize, &amount)) {
+    LOG_F(ERROR, "Can't parse amount value %s", context->Argv[2]);
+    return;
+  }
+
+  const char *memo = context->Argv[3];
+  uint64_t minConf = xatoi<uint64_t>(context->Argv[4]);
+
+  int64_t fee;
+  if (!parseMoneyValue(context->Argv[5], context->CoinInfo.RationalPartSize, &fee)) {
+    LOG_F(ERROR, "Can't parse fee value %s", context->Argv[5]);
+    return;
+  }
+
+  CNetworkClient::ZSendMoneyResult result;
+  CNetworkClient::EOperationStatus status = context->Client->ioZSendMany(context->Base, source, destination, amount, memo, minConf, fee, result);
+  if (status == CNetworkClient::EStatusOk) {
+    LOG_F(INFO, "AsyncOp ID: %s", result.AsyncOperationId.c_str());
+  } else {
+    LOG_F(ERROR, "zsendMany error: %s", result.Error.c_str());
+  }
+}
+
+void zgetBalanceCoro(CContext *context)
+{
+  if (context->ArgsNum != 1) {
+    LOG_F(INFO, "Usage: zgetBalance <address>");
+    return;
+  }
+
+  int64_t balance = 0;
+  CNetworkClient::EOperationStatus status = context->Client->ioZGetBalance(context->Base, context->Argv[0], &balance);
+  if (status == CNetworkClient::EStatusOk) {
+    LOG_F(INFO, "balance: %s", FormatMoney(balance, context->CoinInfo.RationalPartSize).c_str());
+  } else {
+    LOG_F(ERROR, "zgetBalance error");
+  }
+}
+
+
 void printHelpMessage()
 {
   printf("noderpc usage:\n");
@@ -279,6 +349,21 @@ int main(int argc, char **argv)
   } else if (method == "getBlockConfirmation") {
     coroutineCall(coroutineNew([](void *arg) {
       getBlockConfirmationCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
+    }, &context, 0x10000));
+  } else if (method == "listUnspent") {
+    coroutineCall(coroutineNew([](void *arg) {
+      listUnspentCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
+    }, &context, 0x10000));
+  } else if (method == "zsendMany") {
+    coroutineCall(coroutineNew([](void *arg) {
+      zsendManyCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
+    }, &context, 0x10000));
+  } else if (method == "zgetBalance") {
+    coroutineCall(coroutineNew([](void *arg) {
+      zgetBalanceCoro(static_cast<CContext*>(arg));
       postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else {

@@ -264,8 +264,8 @@ int main(int argc, char *argv[])
       std::sort(backendConfig.PoolFee.begin(), backendConfig.PoolFee.end(), [](const PoolFeeEntry &l, const PoolFeeEntry &r) { return l.User < r.User; });
 
       // ZEC specific
-      // backendConfig.poolZAddr;
-      // backendConfig.poolTAddr;
+      backendConfig.poolZAddr = coinConfig.PoolZAddr;
+      backendConfig.poolTAddr = coinConfig.PoolTAddr;
 
       // Nodes
       std::unique_ptr<CNetworkClientDispatcher> dispatcher(new CNetworkClientDispatcher(monitorBase, coinInfo, totalThreadsNum));

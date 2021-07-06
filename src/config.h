@@ -64,6 +64,8 @@ struct CCoinConfig {
   std::vector<CMiningAddressConfig> MiningAddresses;
   std::string CoinbaseMsg;
   double ProfitSwitchCoeff;
+  std::string PoolZAddr;
+  std::string PoolTAddr;
 
   void load(const rapidjson::Value &value, std::string &errorDescription, EErrorType *error);
 };

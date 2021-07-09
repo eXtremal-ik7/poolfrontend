@@ -145,7 +145,14 @@ int main(int argc, char *argv[])
     poolContext.UserMgr.reset(new UserManager(poolContext.DatabasePath));
 
     // Base config
-    poolContext.UserMgr->setBaseCfg(config.PoolName, config.PoolHostProtocol, config.PoolHostAddress, config.PoolActivateLinkPrefix, config.PoolChangePasswordLinkPrefix);
+    poolContext.UserMgr->setBaseCfg(config.PoolName,
+                                    config.PoolHostProtocol,
+                                    config.PoolHostAddress,
+                                    config.PoolActivateLinkPrefix,
+                                    config.PoolChangePasswordLinkPrefix,
+                                    config.PoolActivate2faLinkPrefix,
+                                    config.PoolDeactivate2faLinkPrefix);
+
     // Admin & observer passwords
     if (!config.AdminPasswordHash.empty())
       poolContext.UserMgr->addSpecialUser(UserManager::ESpecialUserAdmin, config.AdminPasswordHash);

@@ -83,6 +83,8 @@ struct CPoolFrontendConfig {
   std::string PoolHostAddress;
   std::string PoolActivateLinkPrefix;
   std::string PoolChangePasswordLinkPrefix;
+  std::string PoolActivate2faLinkPrefix;
+  std::string PoolDeactivate2faLinkPrefix;
 
   bool SmtpEnabled;
   std::string SmtpServer;

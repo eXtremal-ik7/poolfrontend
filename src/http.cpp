@@ -15,7 +15,6 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userLogin", {hmPost, fnUserLogin}},
   {"userLogout", {hmPost, fnUserLogout}},
   {"userChangeEmail", {hmPost, fnUserChangeEmail}},
-  {"userChangePassword", {hmPost, fnUserChangePassword}},
   {"userChangePasswordForce", {hmPost, fnUserChangePasswordForce}},
   {"userChangePasswordInitiate", {hmPost, fnUserChangePasswordInitiate}},
   {"userGetCredentials", {hmPost, fnUserGetCredentials}},
@@ -27,6 +26,8 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userGetFeePlan", {hmPost, fnUserGetFeePlan}},
   {"userUpdateFeePlan", {hmPost, fnUserUpdateFeePlan}},
   {"userChangeFeePlan", {hmPost, fnUserChangeFeePlan}},
+  {"userActivate2faInitiate", {hmPost, fnUserActivate2faInitiate}},
+  {"userDeactivate2faInitiate", {hmPost, fnUserDeactivate2faInitiate}},
   // Backend functions
   {"backendManualPayout", {hmPost, fnBackendManualPayout}},
   {"backendQueryCoins", {hmPost, fnBackendQueryCoins}},
@@ -151,6 +152,7 @@ static inline void parseUserCredentials(rapidjson::Value &document, UserManager:
   jsonParseString(document, "password", credentials.Password, "", validAcc);
   jsonParseString(document, "name", credentials.Name, "", validAcc);
   jsonParseString(document, "email", credentials.EMail, "", validAcc);
+  jsonParseString(document, "totp", credentials.TwoFactor, "", validAcc);
   jsonParseBoolean(document, "isActive", &credentials.IsActive, false, validAcc);
   jsonParseBoolean(document, "isReadOnly", &credentials.IsReadOnly, false, validAcc);
   jsonParseString(document, "feePlanId", credentials.FeePlan, "", validAcc);
@@ -238,7 +240,6 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserLogin: onUserLogin(document); break;
       case fnUserLogout: onUserLogout(document); break;
       case fnUserChangeEmail: onUserChangeEmail(document); break;
-      case fnUserChangePassword: onUserChangePassword(document); break;
       case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(document); break;
       case fnUserChangePasswordForce: onUserChangePasswordForce(document); break;
       case fnUserGetCredentials: onUserGetCredentials(document); break;
@@ -250,6 +251,8 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserGetFeePlan: onUserGetFeePlan(document); break;
       case fnUserUpdateFeePlan: onUserUpdateFeePlan(document); break;
       case fnUserChangeFeePlan: onUserChangeFeePlan(document); break;
+      case fnUserActivate2faInitiate: onUserActivate2faInitiate(document); break;
+      case fnUserDeactivate2faInitiate: onUserDeactivate2faInitiate(document); break;
       case fnBackendManualPayout: onBackendManualPayout(document); break;
       case fnBackendQueryUserBalance: onBackendQueryUserBalance(document); break;
       case fnBackendQueryUserStats: onBackendQueryUserStats(document); break;
@@ -363,16 +366,24 @@ void PoolHttpConnection::close()
 
 void PoolHttpConnection::onUserAction(rapidjson::Document &document)
 {
+  std::string sessionId;
+  std::string targetLogin;
   std::string actionId;
+  std::string newPassword;
+  std::string totp;
   bool validAcc = true;
-  jsonParseString(document, "id", actionId, &validAcc);
+  jsonParseString(document, "sessionId", sessionId, "", &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
+  jsonParseString(document, "actionId", actionId, &validAcc);
+  jsonParseString(document, "newPassword", newPassword, "", &validAcc);
+  jsonParseString(document, "totp", totp, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userAction(actionId, [this](const char *status) {
+  Server_.userManager().userAction(sessionId, targetLogin, actionId, newPassword, totp, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
@@ -482,25 +493,6 @@ void PoolHttpConnection::onUserChangeEmail(rapidjson::Document&)
   aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
 }
 
-void PoolHttpConnection::onUserChangePassword(rapidjson::Document &document)
-{
-  bool validAcc = true;
-  std::string actionId;
-  std::string newPassword;
-  jsonParseString(document, "id", actionId, &validAcc);
-  jsonParseString(document, "newPassword", newPassword, &validAcc);
-  if (!validAcc) {
-    replyWithStatus("json_format_error");
-    return;
-  }
-
-  objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userChangePassword(actionId, newPassword, [this](const char *status) {
-    replyWithStatus(status);
-    objectDecrementReference(aioObjectHandle(Socket_), 1);
-  });
-}
-
 void PoolHttpConnection::onUserChangePasswordInitiate(rapidjson::Document &document)
 {
   bool validAcc = true;
@@ -512,7 +504,7 @@ void PoolHttpConnection::onUserChangePasswordInitiate(rapidjson::Document &docum
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userActionInitiate(login, UserActionRecord::UserChangePassword, [this](const char *status) {
+  Server_.userManager().userChangePasswordInitiate(login, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
@@ -656,12 +648,14 @@ void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)
   std::string targetLogin;
   UserSettingsRecord settings;
   std::string payoutThreshold;
+  std::string totp;
   jsonParseString(document, "id", sessionId, &validAcc);
   jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "coin", settings.Coin, &validAcc);
   jsonParseString(document, "address", settings.Address, &validAcc);
   jsonParseString(document, "payoutThreshold", payoutThreshold, &validAcc);
   jsonParseBoolean(document, "autoPayoutEnabled", &settings.AutoPayout, &validAcc);
+  jsonParseString(document, "totp", totp, "", &validAcc);
   if (!validAcc) {
     replyWithStatus("json_format_error");
     return;
@@ -690,7 +684,7 @@ void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().updateSettings(std::move(settings), [this](const char *status) {
+  Server_.userManager().updateSettings(std::move(settings), totp, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
@@ -931,6 +925,55 @@ void PoolHttpConnection::onUserChangeFeePlan(rapidjson::Document &document)
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().changeFeePlan(sessionId, targetLogin, feePlanId, [this](const char *status) {
+    replyWithStatus(status);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
+void PoolHttpConnection::onUserActivate2faInitiate(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  std::string targetLogin;
+  jsonParseString(document, "sessionId", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().activate2faInitiate(sessionId, targetLogin, [this](const char *status, const char *key) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    {
+      JSON::Object result(stream);
+      result.addString("status", status);
+      result.addString("key", key);
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
+void PoolHttpConnection::onUserDeactivate2faInitiate(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  std::string targetLogin;
+  jsonParseString(document, "sessionId", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().deactivate2faInitiate(sessionId, targetLogin, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });

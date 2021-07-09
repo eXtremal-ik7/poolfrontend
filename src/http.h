@@ -37,7 +37,6 @@ private:
   void onUserLogin(rapidjson::Document &document);
   void onUserLogout(rapidjson::Document &document);
   void onUserChangeEmail(rapidjson::Document &document);
-  void onUserChangePassword(rapidjson::Document &document);
   void onUserChangePasswordInitiate(rapidjson::Document &document);
   void onUserChangePasswordForce(rapidjson::Document &document);
   void onUserGetCredentials(rapidjson::Document &document);
@@ -49,6 +48,8 @@ private:
   void onUserGetFeePlan(rapidjson::Document &document);
   void onUserUpdateFeePlan(rapidjson::Document &document);
   void onUserChangeFeePlan(rapidjson::Document &document);
+  void onUserActivate2faInitiate(rapidjson::Document &document);
+  void onUserDeactivate2faInitiate(rapidjson::Document &document);
 
   void onBackendManualPayout(rapidjson::Document &document);
   void onBackendQueryUserBalance(rapidjson::Document &document);
@@ -82,7 +83,6 @@ private:
     fnUserLogin,
     fnUserLogout,
     fnUserChangeEmail,
-    fnUserChangePassword,
     fnUserChangePasswordInitiate,
     fnUserChangePasswordForce,
     fnUserGetCredentials,
@@ -94,6 +94,8 @@ private:
     fnUserEnumerateFeePlan,
     fnUserUpdateFeePlan,
     fnUserChangeFeePlan,
+    fnUserActivate2faInitiate,
+    fnUserDeactivate2faInitiate,
 
     // Backend functions
     fnBackendManualPayout,

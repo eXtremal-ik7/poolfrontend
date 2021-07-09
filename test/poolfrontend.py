@@ -31,12 +31,8 @@ class Poolfrontend:
             data.update({"feePlanId": feePlan})
         return self.__call__("userCreate", data, requiredStatus, debug)
 
-    def userAction(self, actionId, sessionId=None, targetLogin=None, newPassword=None, totp=None, requiredStatus=None, debug=None):
+    def userAction(self, actionId, newPassword=None, totp=None, requiredStatus=None, debug=None):
         data = {"actionId": actionId}
-        if sessionId is not None:
-            data.update({"sessionId": sessionId})
-        if targetLogin is not None:
-            data.update({"targetLogin": targetLogin})
         if newPassword is not None:
             data.update({"newPassword": newPassword})
         if totp is not None:

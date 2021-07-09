@@ -596,6 +596,7 @@ Activate two factor authentication
 * status:string - can be one of common status values or:
   * unknown_id: invalid session id
   * 2fa_already_activated: double 2fa activation
+* key:string - 2fa totp secrey key
   
 ### curl example:
   

@@ -366,14 +366,10 @@ void PoolHttpConnection::close()
 
 void PoolHttpConnection::onUserAction(rapidjson::Document &document)
 {
-  std::string sessionId;
-  std::string targetLogin;
   std::string actionId;
   std::string newPassword;
   std::string totp;
   bool validAcc = true;
-  jsonParseString(document, "sessionId", sessionId, "", &validAcc);
-  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
   jsonParseString(document, "actionId", actionId, &validAcc);
   jsonParseString(document, "newPassword", newPassword, "", &validAcc);
   jsonParseString(document, "totp", totp, "", &validAcc);
@@ -383,7 +379,7 @@ void PoolHttpConnection::onUserAction(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userAction(sessionId, targetLogin, actionId, newPassword, totp, [this](const char *status) {
+  Server_.userManager().userAction(actionId, newPassword, totp, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });

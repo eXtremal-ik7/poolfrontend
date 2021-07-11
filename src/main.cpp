@@ -1,7 +1,10 @@
 #include "config.h"
 #include "http.h"
-#include "poolcore/backend.h"
+
 #include "poolcore/bitcoinRPCClient.h"
+#include "poolcore/ethereumRPCClient.h"
+
+#include "poolcore/backend.h"
 #include "poolcore/coinLibrary.h"
 #include "poolcore/clientDispatcher.h"
 #include "poolcore/thread.h"
@@ -281,6 +284,8 @@ int main(int argc, char *argv[])
         const CNodeConfig &node = coinConfig.GetWorkNodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
           client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
+        } else if (node.Type == "ethereumrpc") {
+          client = new CEthereumRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), backendConfig);
         } else {
           LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
           return 1;
@@ -294,6 +299,8 @@ int main(int argc, char *argv[])
         const CNodeConfig &node = coinConfig.RPCNodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
           client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
+        } else if (node.Type == "ethereumrpc") {
+          client = new CEthereumRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), backendConfig);
         } else {
           LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
           return 1;

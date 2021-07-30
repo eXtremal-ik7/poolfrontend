@@ -221,5 +221,8 @@ class Poolfrontend:
     def backendUpdateProfitSwitchCoeff(self, adminSessionId, coin, profitSwitchCoeff, requiredStatus=None, debug=None):
         return self.__call__("backendUpdateProfitSwitchCoeff", {"id": adminSessionId, "coin": coin, "profitSwitchCoeff": profitSwitchCoeff}, requiredStatus, debug)
 
+    def backendPoolLuck(self, coin, intervals, requiredStatus=None, debug=None):
+        return self.__call__("backendPoolLuck", {"coin": coin, "intervals": intervals}, requiredStatus, debug)
+
     def instanceEnumerateAll(self, requiredStatus=None, debug=None):
         return self.__call__("instanceEnumerateAll", {}, requiredStatus, debug)

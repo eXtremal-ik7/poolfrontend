@@ -64,6 +64,7 @@ private:
   void onBackendQueryPoolStatsHistory(rapidjson::Document &document);
   void onBackendQueryProfitSwitchCoeff(rapidjson::Document &document);
   void onBackendUpdateProfitSwitchCoeff(rapidjson::Document &document);
+  void onBackendPoolLuck(rapidjson::Document &document);
 
   void onInstanceEnumerateAll(rapidjson::Document &document);
 
@@ -111,6 +112,7 @@ private:
     fnBackendQueryPoolStatsHistory,
     fnBackendQueryProfitSwitchCoeff,
     fnBackendUpdateProfitSwitchCoeff,
+    fnBackendPoolLuck,
 
     // Instance functions
     fnInstanceEnumerateAll,

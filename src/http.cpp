@@ -42,6 +42,7 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"backendQueryUserStatsHistory", {hmPost, fnBackendQueryUserStatsHistory}},
   {"backendQueryWorkerStatsHistory", {hmPost, fnBackendQueryWorkerStatsHistory}},
   {"backendUpdateProfitSwitchCoeff", {hmPost, fnBackendUpdateProfitSwitchCoeff}},
+  {"backendPoolLuck", {hmPost, fnBackendPoolLuck}},
   // Instance functions
   {"instanceEnumerateAll", {hmPost, fnInstanceEnumerateAll}},
   // Complex mining stats functions
@@ -266,6 +267,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnBackendQueryPoolStatsHistory : onBackendQueryPoolStatsHistory(document); break;
       case fnBackendQueryProfitSwitchCoeff : onBackendQueryProfitSwitchCoeff(document); break;
       case fnBackendUpdateProfitSwitchCoeff : onBackendUpdateProfitSwitchCoeff(document); break;
+      case fnBackendPoolLuck : onBackendPoolLuck(document); break;
       case fnInstanceEnumerateAll : onInstanceEnumerateAll(document); break;
       case fnComplexMiningStatsGetInfo : onComplexMiningStatsGetInfo(document); break;
       default:
@@ -1485,7 +1487,7 @@ void PoolHttpConnection::onBackendQueryPoolStats(rapidjson::Document &document)
   }
 
   if (!coin.empty()) {
-  StatisticDb *statistic = Server_.statisticDb(coin);
+    StatisticDb *statistic = Server_.statisticDb(coin);
     if (!statistic) {
       replyWithStatus("invalid_coin");
       return;
@@ -1667,6 +1669,62 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff(rapidjson::Document &d
 
   backend->setProfitSwitchCoeff(profitSwitchCoeff);
   replyWithStatus("ok");
+}
+
+void PoolHttpConnection::onBackendPoolLuck(rapidjson::Document &document)
+{
+  if (!document.HasMember("coin") || !document["coin"].IsString() ||
+      !document.HasMember("intervals") || !document["intervals"].IsArray()) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  std::string coin = document["coin"].GetString();
+  PoolBackend *backend = Server_.backend(coin);
+  if (!backend) {
+    replyWithStatus("invalid_coin");
+    return;
+  }
+
+  int64_t prevInterval = 0;
+  std::vector<int64_t> intervals;
+  rapidjson::Value::Array intervalsValue = document["intervals"].GetArray();
+  for (rapidjson::SizeType i = 0, ie = intervalsValue.Size(); i != ie; ++i) {
+    if (!intervalsValue[i].IsInt64()) {
+      replyWithStatus("json_format_error");
+      return;
+    }
+
+    int64_t interval = intervalsValue[i].GetInt64();
+    if (interval <= prevInterval) {
+      replyWithStatus("json_format_error");
+      return;
+    }
+
+    prevInterval = interval;
+    intervals.push_back(interval);
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  backend->accountingDb()->poolLuck(std::move(intervals), [this](const std::vector<double> &result) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+    {
+      JSON::Object response(stream);
+      response.addString("status", "ok");
+      response.addField("luck");
+      {
+        JSON::Array luckArray(stream);
+        for (const auto &luck: result)
+          luckArray.addDouble(luck);
+      }
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
 }
 
 void PoolHttpConnection::onInstanceEnumerateAll(rapidjson::Document&)

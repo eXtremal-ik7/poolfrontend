@@ -237,41 +237,12 @@ int main(int argc, char *argv[])
           return 1;
         }
 
-        backendConfig.MiningAddresses.add(addr.Address, addr.Weight);
+        backendConfig.MiningAddresses.add(CMiningAddress(addr.Address, addr.PrivateKey), addr.Weight);
       }
 
       backendConfig.CoinBaseMsg = coinConfig.CoinbaseMsg;
       if (backendConfig.CoinBaseMsg.empty())
         backendConfig.CoinBaseMsg = config.PoolName;
-
-      backendConfig.PoolFee.resize(coinConfig.Fees.size());
-      double feePercentageSum = 0.0;
-      for (size_t feeIdx = 0, feeIdxE = coinConfig.Fees.size(); feeIdx != feeIdxE; ++feeIdx) {
-        PoolFeeEntry &entry = backendConfig.PoolFee[feeIdx];
-        entry.User = coinConfig.Fees[feeIdx].Address;
-        entry.Percentage = coinConfig.Fees[feeIdx].Percentage;
-
-        UserManager::Credentials credentials;
-        if (!poolContext.UserMgr->getUserCredentials(entry.User, credentials)) {
-          LOG_F(ERROR, "User %s not found", entry.User.c_str());
-          LOG_F(ERROR, "You need create user before adding to pool fee receivers");
-          return 1;
-        }
-
-        if (entry.Percentage > 100.0f) {
-          LOG_F(ERROR, "Invalid pool fee: %.3f", entry.Percentage);
-          return 1;
-        }
-
-        feePercentageSum += entry.Percentage;
-      }
-
-      if (feePercentageSum > 100.0f) {
-        LOG_F(ERROR, "Invalid summary pool fee: %.3lf", feePercentageSum);
-        return 1;
-      }
-
-      std::sort(backendConfig.PoolFee.begin(), backendConfig.PoolFee.end(), [](const PoolFeeEntry &l, const PoolFeeEntry &r) { return l.User < r.User; });
 
       // ZEC specific
       backendConfig.poolZAddr = coinConfig.PoolZAddr;

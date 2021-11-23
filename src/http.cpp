@@ -1338,11 +1338,8 @@ void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
         object.addString("algorithm", info.Algorithm);
         object.addString("minimalPayout", FormatMoney(backend->getConfig().MinimalAllowedPayout, info.RationalPartSize));
 
-        // Calculate fee
-        double fee = 0.0;
-        for (const auto &feeEntry: backend->getConfig().PoolFee)
-          fee += feeEntry.Percentage;
-        object.addDouble("totalFee", fee);
+        // TODO: calculate fee for current user
+        object.addDouble("totalFee", 0.0);
       }
     }
   }

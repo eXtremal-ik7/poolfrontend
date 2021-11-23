@@ -42,6 +42,7 @@ struct CFeeConfig {
 
 struct CMiningAddressConfig {
   std::string Address;
+  std::string PrivateKey;
   uint32_t Weight;
 };
 

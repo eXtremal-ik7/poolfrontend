@@ -60,6 +60,7 @@ include_directories(
   ${poolcore_BINARY_DIR}/include
   ${libp2p_SOURCE_DIR}/include
   ${libp2p_BINARY_DIR}/include
+  ${secp256k1_SOURCE_DIR}/include
 )
 
 set(LIBRARIES
@@ -71,6 +72,7 @@ set(LIBRARIES
   asyncio-0.5
   asyncioextras-0.5
   p2putils
+  secp256k1
   libsodium::libsodium
   RapidJSON::rapidjson
   OpenSSL::SSL

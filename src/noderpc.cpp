@@ -16,7 +16,8 @@ enum CmdLineOptsTy {
   clOptUser,
   clOptPassword,
   clOptMethod,
-  clOptMiningAddresses
+  clOptMiningAddresses,
+  clOptMiningPrivateKeys
 };
 
 static option cmdLineOpts[] = {
@@ -28,6 +29,7 @@ static option cmdLineOpts[] = {
   {"password", required_argument, nullptr, clOptPassword},
   {"method", required_argument, nullptr, clOptMethod},
   {"mining-addresses", required_argument, nullptr, clOptMiningAddresses},
+  {"private-keys", required_argument, nullptr, clOptMiningPrivateKeys},
   {nullptr, 0, nullptr, 0}
 };
 
@@ -251,6 +253,7 @@ int main(int argc, char **argv)
   const char *password = "";
   std::string method;
   std::vector<std::string> miningAddresses;
+  std::vector<std::string> privateKeys;
 
   // Parsing command line
   int res;
@@ -287,6 +290,15 @@ int main(int argc, char **argv)
         }
         break;
       }
+      case clOptMiningPrivateKeys: {
+        const char *p = optarg;
+        while (p) {
+          const char *commaPtr = strchr(p, ',');
+          privateKeys.emplace_back(p, commaPtr ? commaPtr-p : strlen(p));
+          p = commaPtr ? commaPtr+1 : nullptr;
+        }
+        break;
+      }
       case ':' :
         fprintf(stderr, "Error: option %s missing argument\n", cmdLineOpts[index].name);
         break;
@@ -299,6 +311,11 @@ int main(int argc, char **argv)
 
   if (type.empty() || coin.empty() || !address || method.empty()) {
     fprintf(stderr, "Error: you must specify --node, --coin, --address, --method\n");
+    exit(1);
+  }
+  
+  if (!privateKeys.empty() && privateKeys.size() != miningAddresses.size()) {
+    fprintf(stderr, "Error: private keys amount must be equal to mining addresses amount\n");
     exit(1);
   }
 

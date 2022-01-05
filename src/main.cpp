@@ -61,6 +61,17 @@ struct PoolContext {
   std::unique_ptr<ComplexMiningStats> MiningStats;
 };
 
+std::filesystem::path userHomeDir()
+{
+  char homedir[512];
+#ifdef _WIN32
+  snprintf(homedir, sizeof(homedir), "%s%s", getenv("HOMEDRIVE"), getenv("HOMEPATH"));
+#else
+  snprintf(homedir, sizeof(homedir), "%s", getenv("HOME"));
+#endif
+  return homedir;
+}
+
 int main(int argc, char *argv[])
 {
   if (argc != 2) {
@@ -113,7 +124,10 @@ int main(int argc, char *argv[])
   }
 
   {
-    poolContext.DatabasePath = config.DbPath;
+    if (config.DbPath.starts_with("~/") || config.DbPath.starts_with("~\\"))
+      poolContext.DatabasePath = userHomeDir() / (config.DbPath.data()+2);
+    else
+      poolContext.DatabasePath = config.DbPath;
 
     {
       char logFileName[64];
@@ -401,7 +415,9 @@ int main(int argc, char *argv[])
   // Handle CTRL+C (SIGINT)
   signal(SIGINT, sigIntHandler);
   signal(SIGTERM, sigIntHandler);
+#ifndef WIN32
   signal(SIGUSR1, sigUsrHandler);
+#endif
 
   std::thread sigIntThread([&monitorBase, &poolContext]() {
     loguru::set_thread_name("sigint_monitor");

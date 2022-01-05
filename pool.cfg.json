@@ -1,7 +1,7 @@
 {
    "poolfrontend":{
       "isMaster":true,
-      "dbPath":"/home/user/pooldb",
+      "dbPath":"~/pooldb",
       "httpPort":18880,
       "poolName":"pool",
       "poolHostAddress":"localhost",

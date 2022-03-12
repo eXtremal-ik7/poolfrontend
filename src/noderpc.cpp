@@ -154,7 +154,7 @@ void getBlockConfirmationCoro(CContext *context)
   CNetworkClient::GetBlockConfirmationsQuery &queryElement = query.emplace_back();
   queryElement.Hash = blockHash;
   queryElement.Height = xatoi<uint64_t>(blockHeight);
-  if (context->Client->ioGetBlockConfirmations(context->Base, query)) {
+  if (context->Client->ioGetBlockConfirmations(context->Base, 0, query)) {
     LOG_F(INFO, "confirmations: %" PRId64 "", queryElement.Confirmations);
   } else {
     LOG_F(ERROR, "can't get confirmations for %s", blockHash);

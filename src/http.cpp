@@ -557,6 +557,7 @@ void PoolHttpConnection::onUserGetCredentials(rapidjson::Document &document)
       result.addInt("registrationDate", credentials.RegistrationDate);
       result.addBoolean("isActive", credentials.IsActive);
       result.addBoolean("isReadOnly", credentials.IsReadOnly);
+      result.addBoolean("has2fa", credentials.HasTwoFactor);
     } else {
       result.addString("status", "unknown_id");
     }
@@ -1337,7 +1338,6 @@ void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
         object.addString("fullName", info.FullName);
         object.addString("algorithm", info.Algorithm);
         object.addString("minimalPayout", FormatMoney(backend->getConfig().MinimalAllowedPayout, info.RationalPartSize));
-
         // TODO: calculate fee for current user
         object.addDouble("totalFee", 0.0);
       }
@@ -1388,7 +1388,7 @@ void PoolHttpConnection::onBackendQueryFoundBlocks(rapidjson::Document &document
           {
             JSON::Object block(stream);
             block.addInt("height", blocks[i].Height);
-            block.addString("hash", blocks[i].Hash);
+            block.addString("hash", !blocks[i].PublicHash.empty() ? blocks[i].PublicHash : blocks[i].Hash);
             block.addInt("time", blocks[i].Time);
             block.addInt("confirmations", confirmations[i].Confirmations);
             block.addString("generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.RationalPartSize));

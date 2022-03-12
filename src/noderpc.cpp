@@ -3,6 +3,7 @@
 #include "poolcore/backendData.h"
 #include "poolcore/bitcoinRPCClient.h"
 #include "poolcore/coinLibrary.h"
+#include "poolcore/ethereumRPCClient.h"
 #include "p2putils/uriParse.h"
 #include "loguru.hpp"
 #include <inttypes.h>
@@ -338,6 +339,17 @@ int main(int argc, char **argv)
       exit(1);
     }
     context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address, user, password, true));
+  } else if (type == "ethereumrpc") {
+    if ((method == "getBalance" || method == "buildTransaction") &&
+        miningAddresses.size() != 1) {
+      fprintf(stderr, "Error: you must specify single mining address\n");
+      exit(1);
+    }
+
+    PoolBackendConfig config;
+    for (size_t i = 0, ie = miningAddresses.size(); i != ie; ++i)
+      config.MiningAddresses.add(CMiningAddress(miningAddresses[i], !privateKeys.empty() ? privateKeys[i] : ""), 1);
+    context.Client.reset(new CEthereumRpcClient(context.Base, 1, context.CoinInfo, address, config));
   } else {
     LOG_F(ERROR, "unknown client type: %s", type.c_str());
     return 1;

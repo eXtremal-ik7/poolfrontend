@@ -127,11 +127,12 @@ void getTxConfirmationsCoro(CContext *context)
   const char *txId = context->Argv[0];
   std::string error;
   int64_t confirmations = 0;
-  CNetworkClient::EOperationStatus status = context->Client->ioGetTxConfirmations(context->Base, txId, &confirmations, error);
+  int64_t txFee = 0;
+  CNetworkClient::EOperationStatus status = context->Client->ioGetTxConfirmations(context->Base, txId, &confirmations, &txFee, error);
   if (status == CNetworkClient::EStatusOk) {
     // Nothing to do
   } else if (status == CNetworkClient::EStatusInvalidAddressOrKey) {
-    LOG_F(ERROR, "Transaction %s lost, need resend", txId);
+    LOG_F(ERROR, "Transaction %s not included in block, will try resend", txId);
     return;
   } else {
     LOG_F(WARNING, "Transaction %s checkong error \"%s\", will try later...", txId, error.c_str());
@@ -139,6 +140,7 @@ void getTxConfirmationsCoro(CContext *context)
   }
 
   LOG_F(INFO, "Confirmations: %" PRIi64 "", confirmations);
+  LOG_F(INFO, "Fee: %s\n", FormatMoney(txFee, context->CoinInfo.RationalPartSize).c_str());
 }
 
 void getBlockConfirmationCoro(CContext *context)

@@ -95,15 +95,16 @@ void buildTransactionCoro(CContext *context)
 
 void sendTransactionCoro(CContext *context)
 {
-  if (context->ArgsNum != 1) {
-    LOG_F(INFO, "Usage: sendTransaction <txdata>");
+  if (context->ArgsNum != 2) {
+    LOG_F(INFO, "Usage: sendTransaction <txdata> <txid>");
     return;
   }
 
   const char *txData = context->Argv[0];
+  const char *txId = context->Argv[1];
   std::string error;
   CNetworkClient::EOperationStatus status =
-    context->Client->ioSendTransaction(context->Base, txData, error);
+    context->Client->ioSendTransaction(context->Base, txData, txId, error);
   if (status == CNetworkClient::EStatusOk) {
     // Nothing to do
   } else if (status == CNetworkClient::EStatusVerifyRejected) {

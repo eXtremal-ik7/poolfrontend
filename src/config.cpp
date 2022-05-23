@@ -280,6 +280,7 @@ void CCoinConfig::load(const rapidjson::Value &value, std::string &errorDescript
     MiningAddresses.resize(array.Size());
     for (rapidjson::SizeType i = 0, ie = array.Size(); i != ie; ++i) {
       jsonParseString(array[i], "address", MiningAddresses[i].Address, error, localPath + " -> miningAddresses", errorDescription);
+      jsonParseString(array[i], "privateKey", MiningAddresses[i].PrivateKey, "", error, localPath + " -> privateKey", errorDescription);
       jsonParseUInt(array[i], "weight", &MiningAddresses[i].Weight, error, localPath + " -> miningAddresses", errorDescription);
     }
   }

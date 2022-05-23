@@ -165,6 +165,32 @@ void getBlockConfirmationCoro(CContext *context)
   }
 }
 
+void getBlockExtraInfoCoro(CContext *context)
+{
+  if (context->ArgsNum != 2) {
+    LOG_F(INFO, "Usage: getBlockExtraInfo <hash> <height>");
+    return;
+  }
+
+  const char *blockHash = context->Argv[0];
+  const char *blockHeight = context->Argv[1];
+
+  std::vector<CNetworkClient::GetBlockExtraInfoQuery> query;
+  auto &queryElement = query.emplace_back();
+  queryElement.Hash = blockHash;
+  queryElement.Height = xatoi<uint64_t>(blockHeight);
+  queryElement.TxFee = 0;
+  queryElement.BlockReward = 0;
+  if (context->Client->ioGetBlockExtraInfo(context->Base, 0, query)) {
+    LOG_F(INFO, "confirmations: %" PRId64 "", queryElement.Confirmations);
+    LOG_F(INFO, "public hash: %s", queryElement.PublicHash.c_str());
+    LOG_F(INFO, "tx fee: %s", FormatMoney(queryElement.TxFee, context->CoinInfo.RationalPartSize).c_str());
+    LOG_F(INFO, "block reward: %s", FormatMoney(queryElement.BlockReward, context->CoinInfo.RationalPartSize).c_str());
+  } else {
+    LOG_F(ERROR, "can't get confirmations for %s", blockHash);
+  }
+}
+
 void listUnspentCoro(CContext *context)
 {
   if (context->ArgsNum != 0) {
@@ -301,8 +327,8 @@ int main(int argc, char **argv)
           privateKeys.emplace_back(p, commaPtr ? commaPtr-p : strlen(p));
           p = commaPtr ? commaPtr+1 : nullptr;
         }
-        break;
-      }
+      break;
+    }
       case ':' :
         fprintf(stderr, "Error: option %s missing argument\n", cmdLineOpts[index].name);
         break;
@@ -317,7 +343,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "Error: you must specify --node, --coin, --address, --method\n");
     exit(1);
   }
-  
+
   if (!privateKeys.empty() && privateKeys.size() != miningAddresses.size()) {
     fprintf(stderr, "Error: private keys amount must be equal to mining addresses amount\n");
     exit(1);
@@ -381,6 +407,11 @@ int main(int argc, char **argv)
   } else if (method == "getBlockConfirmation") {
     coroutineCall(coroutineNew([](void *arg) {
       getBlockConfirmationCoro(static_cast<CContext*>(arg));
+      postQuitOperation(static_cast<CContext*>(arg)->Base);
+    }, &context, 0x10000));
+  } else if (method == "getBlockExtraInfo") {
+    coroutineCall(coroutineNew([](void *arg) {
+      getBlockExtraInfoCoro(static_cast<CContext*>(arg));
       postQuitOperation(static_cast<CContext*>(arg)->Base);
     }, &context, 0x10000));
   } else if (method == "listUnspent") {

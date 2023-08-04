@@ -1454,6 +1454,7 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
           payout.addInt("time", records[i].Time);
           payout.addString("txid", records[i].TransactionId);
           payout.addString("value", FormatMoney(records[i].Value, backend->getCoinInfo().RationalPartSize));
+          payout.addInt("status", records[i].Status);
         }
       }
     }

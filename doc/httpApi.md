@@ -843,6 +843,7 @@ Returns sent payouts for user (time and transaction id for each)
   * time
   * txid
   * value
+  * status (Initialized: 0, TxCreated: 1, TxSent: 2, TxConfirmed: 3, TxRejected: 4)
 
 ### curl example:
 ```

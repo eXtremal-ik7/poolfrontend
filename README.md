@@ -1,1 +1,1 @@
-Stable version at https://github.com/eXtremal-ik7/poolfrontend/tree/v0.2
+Stable version at https://github.com/eXtremal-ik7/poolfrontend/tree/version/0.4

@@ -194,6 +194,7 @@ void CNodeConfig::load(const rapidjson::Value &value, const std::string &path, s
   jsonParseString(value, "address", Address, error, localPath, errorDescription);
   jsonParseString(value, "login", Login, "", error, localPath, errorDescription);
   jsonParseString(value, "password", Password, "", error, localPath, errorDescription);
+  jsonParseString(value, "wallet", Wallet, "", error, localPath, errorDescription);
   jsonParseBoolean(value, "longPollEnabled", &LongPollEnabled, true, error, localPath, errorDescription);
 }
 

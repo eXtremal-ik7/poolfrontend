@@ -16,6 +16,7 @@ enum CmdLineOptsTy {
   clOptAddress,
   clOptUser,
   clOptPassword,
+  clOptWallet,
   clOptMethod,
   clOptMiningAddresses,
   clOptMiningPrivateKeys
@@ -28,6 +29,7 @@ static option cmdLineOpts[] = {
   {"address", required_argument, nullptr, clOptAddress},
   {"user", required_argument, nullptr, clOptUser},
   {"password", required_argument, nullptr, clOptPassword},
+  {"wallet", required_argument, nullptr, clOptWallet},
   {"method", required_argument, nullptr, clOptMethod},
   {"mining-addresses", required_argument, nullptr, clOptMiningAddresses},
   {"private-keys", required_argument, nullptr, clOptMiningPrivateKeys},
@@ -281,6 +283,7 @@ int main(int argc, char **argv)
   const char *address = nullptr;
   const char *user = "";
   const char *password = "";
+  const char *wallet = "";
   std::string method;
   std::vector<std::string> miningAddresses;
   std::vector<std::string> privateKeys;
@@ -307,6 +310,9 @@ int main(int argc, char **argv)
         break;
       case clOptPassword:
         password = optarg;
+        break;
+      case clOptWallet:
+        wallet = optarg;
         break;
       case clOptMethod:
         method = optarg;
@@ -367,7 +373,7 @@ int main(int argc, char **argv)
       fprintf(stderr, "Error: you must specify --user and --password\n");
       exit(1);
     }
-    context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address, user, password, true));
+    context.Client.reset(new CBitcoinRpcClient(context.Base, 1, context.CoinInfo, address, user, password, wallet, true));
   } else if (type == "ethereumrpc") {
     if ((method == "getBalance" || method == "buildTransaction") &&
         miningAddresses.size() != 1) {

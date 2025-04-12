@@ -28,6 +28,7 @@ struct CNodeConfig {
   std::string Address;
   std::string Login;
   std::string Password;
+  std::string Wallet;
   bool LongPollEnabled;
 
   void load(const rapidjson::Value &value, const std::string &path, std::string &errorDescription, EErrorType *error);

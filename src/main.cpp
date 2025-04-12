@@ -268,7 +268,7 @@ int main(int argc, char *argv[])
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.GetWorkNodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
-          client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
+          client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.Wallet.c_str(), node.LongPollEnabled);
         } else if (node.Type == "ethereumrpc") {
           client = new CEthereumRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), backendConfig);
         } else {
@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
         CNetworkClient *client;
         const CNodeConfig &node = coinConfig.RPCNodes[nodeIdx];
         if (node.Type == "bitcoinrpc") {
-          client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.LongPollEnabled);
+          client = new CBitcoinRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), node.Login.c_str(), node.Password.c_str(), node.Wallet.c_str(), node.LongPollEnabled);
         } else if (node.Type == "ethereumrpc") {
           client = new CEthereumRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), backendConfig);
         } else {

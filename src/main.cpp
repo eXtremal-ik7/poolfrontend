@@ -48,8 +48,8 @@ struct PoolContext {
   uint16_t HttpPort;
 
   std::vector<CCoinInfo> CoinList;
+  std::unique_ptr<CPriceFetcher> PriceFetcher;
   std::vector<std::unique_ptr<CNetworkClientDispatcher>> ClientDispatchers;
-  std::vector<std::unique_ptr<CPriceFetcher>> PriceFetchers;
   std::vector<std::unique_ptr<PoolBackend>> Backends;
   std::vector<std::unique_ptr<StatisticServer>> AlgoMetaStatistic;
 
@@ -294,18 +294,14 @@ int main(int argc, char *argv[])
         dispatcher->addRPCClient(client);
       }
 
-      // Initialize price fetcher
-      CPriceFetcher *priceFetcher = new CPriceFetcher(monitorBase, coinInfo);
-
       // Initialize backend
-      PoolBackend *backend = new PoolBackend(createAsyncBase(amOSDefault), std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher, *priceFetcher);
+      PoolBackend *backend = new PoolBackend(createAsyncBase(amOSDefault), std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher);
 
       if (coinConfig.ProfitSwitchCoeff != 0.0)
         backend->setProfitSwitchCoeff(coinConfig.ProfitSwitchCoeff);
 
       poolContext.Backends.emplace_back(backend);
       poolContext.ClientDispatchers.emplace_back(dispatcher.release());
-      poolContext.PriceFetchers.emplace_back(priceFetcher);
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
       poolContext.CoinList.push_back(coinInfo);
 
@@ -327,6 +323,9 @@ int main(int argc, char *argv[])
 
       backend->setAlgoMetaStatistic(AlgoIt->second);
     }
+
+    // Initialize price fetcher
+    poolContext.PriceFetcher.reset(new CPriceFetcher(monitorBase, poolContext.CoinList));
 
     std::sort(poolContext.Backends.begin(), poolContext.Backends.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
 
@@ -354,7 +353,7 @@ int main(int argc, char *argv[])
       }
 
 
-      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, linkedBackends, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig);
+      CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, linkedBackends, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig, poolContext.PriceFetcher.get());
       if (!instance) {
         LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
         return 1;

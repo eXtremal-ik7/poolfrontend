@@ -63,6 +63,8 @@ private:
   void onBackendQueryPoolStats(rapidjson::Document &document);
   void onBackendQueryPoolStatsHistory(rapidjson::Document &document);
   void onBackendQueryProfitSwitchCoeff(rapidjson::Document &document);
+  void onBackendQueryPPLNSPayouts(rapidjson::Document &document);
+  void onBackendQueryPPLNSAcc(rapidjson::Document &document);
   void onBackendUpdateProfitSwitchCoeff(rapidjson::Document &document);
   void onBackendPoolLuck(rapidjson::Document &document);
 
@@ -111,6 +113,8 @@ private:
     fnBackendQueryPoolStats,
     fnBackendQueryPoolStatsHistory,
     fnBackendQueryProfitSwitchCoeff,
+    fnBackendQueryPPLNSPayouts,
+    fnBackendQueryPPLNSAcc,
     fnBackendUpdateProfitSwitchCoeff,
     fnBackendPoolLuck,
 

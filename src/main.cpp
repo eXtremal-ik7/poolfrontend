@@ -206,17 +206,28 @@ int main(int argc, char *argv[])
       poolContext.UserMgr->enableSMTP(smtpAddress, config.SmtpLogin, config.SmtpPassword, config.SmtpSenderAddress, config.SmtpUseSmtps, config.SmtpUseStartTls);
     }
 
+    // Lookup information for all coins
+    for (const auto &coin: config.Coins) {
+      const char *coinName = coin.Name.c_str();
+      CCoinInfo coinInfo = CCoinLibrary::get(coinName);
+      if (coinInfo.Name.empty()) {
+        LOG_F(ERROR, "Unknown coin: %s", coinName);
+        return 1;
+      }
+
+      poolContext.CoinList.push_back(coinInfo);
+    }
+
+    // Initialize price fetcher
+    poolContext.PriceFetcher.reset(new CPriceFetcher(monitorBase, poolContext.CoinList));
+
     // Initialize all backends
     std::map<std::string, StatisticServer*> knownAlgo;
     for (size_t coinIdx = 0, coinIdxE = config.Coins.size(); coinIdx != coinIdxE; ++coinIdx) {
       PoolBackendConfig backendConfig;
       const CCoinConfig &coinConfig = config.Coins[coinIdx];
       const char *coinName = coinConfig.Name.c_str();
-      CCoinInfo coinInfo = CCoinLibrary::get(coinName);
-      if (coinInfo.Name.empty()) {
-        LOG_F(ERROR, "Unknown coin: %s", coinName);
-        return 1;
-      }
+      CCoinInfo &coinInfo = poolContext.CoinList[coinIdx];
 
       // Inherited pool config parameters
       backendConfig.isMaster = poolContext.IsMaster;
@@ -295,7 +306,7 @@ int main(int argc, char *argv[])
       }
 
       // Initialize backend
-      PoolBackend *backend = new PoolBackend(createAsyncBase(amOSDefault), std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher);
+      PoolBackend *backend = new PoolBackend(createAsyncBase(amOSDefault), std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher, *poolContext.PriceFetcher);
 
       if (coinConfig.ProfitSwitchCoeff != 0.0)
         backend->setProfitSwitchCoeff(coinConfig.ProfitSwitchCoeff);
@@ -303,7 +314,6 @@ int main(int argc, char *argv[])
       poolContext.Backends.emplace_back(backend);
       poolContext.ClientDispatchers.emplace_back(dispatcher.release());
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
-      poolContext.CoinList.push_back(coinInfo);
 
       // Initialize algorithm meta statistic
       auto AlgoIt = knownAlgo.find(coinInfo.Algorithm);
@@ -323,9 +333,6 @@ int main(int argc, char *argv[])
 
       backend->setAlgoMetaStatistic(AlgoIt->second);
     }
-
-    // Initialize price fetcher
-    poolContext.PriceFetcher.reset(new CPriceFetcher(monitorBase, poolContext.CoinList));
 
     std::sort(poolContext.Backends.begin(), poolContext.Backends.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
 

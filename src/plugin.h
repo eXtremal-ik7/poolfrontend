@@ -1,0 +1,51 @@
+#pragma once
+#include "config.h"
+#include "poolcore/backendData.h"
+#include "poolcore/complexMiningStats.h"
+#include "poolcore/poolCore.h"
+#include "poolcore/poolInstance.h"
+#include "poolcore/priceFetcher.h"
+#include <functional>
+
+// Plugin callbacks
+using FAddExtraCoin = std::function<bool(const char*, CCoinInfo&)>;
+
+using FAddRpcClient = std::function<CNetworkClient*(const std::string&,
+                                                    asyncBase*,
+                                                    unsigned,
+                                                    const CCoinInfo&,
+                                                    const CNodeConfig&,
+                                                    const PoolBackendConfig&)>;
+
+using FAddRpcClientForTerminal = std::function<CNetworkClient*(const std::string&,
+                                                               asyncBase*,
+                                                               unsigned,
+                                                               const CCoinInfo&,
+                                                               const CNodeConfig&,
+                                                               const PoolBackendConfig&,
+                                                               const std::string&,
+                                                               const std::vector<std::string>&,
+                                                               const std::vector<std::string>&)>;
+
+using FCreatePoolInstance = std::function<CPoolInstance*(asyncBase*,
+                                                         UserManager&,
+                                                         const std::vector<PoolBackend*>&,
+                                                         CThreadPool&,
+                                                         const std::string&,
+                                                         const std::string&,
+                                                         unsigned,
+                                                         unsigned,
+                                                         rapidjson::Value&,
+                                                         CPriceFetcher*)>;
+
+using FCreateMiningStatsHandler = std::function<ComplexMiningStats*(const std::vector<std::unique_ptr<PoolBackend>>&,
+                                                                    const std::filesystem::path&)>;
+
+struct CPluginContext {
+  bool HasMiningStatsHandler = false;
+  std::vector<FAddExtraCoin> AddExtraCoinProcs;
+  std::vector<FAddRpcClient> AddRpcClientProcs;
+  std::vector<FAddRpcClientForTerminal> AddRpcClientForTerminalProcs;
+  std::vector<FCreatePoolInstance> CreatePoolInstanceProcs;
+  FCreateMiningStatsHandler CreateMiningStatsHandlerProc;
+};

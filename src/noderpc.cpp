@@ -4,10 +4,12 @@
 #include "poolcore/bitcoinRPCClient.h"
 #include "poolcore/coinLibrary.h"
 #include "poolcore/ethereumRPCClient.h"
-#include "p2putils/uriParse.h"
+#include "plugin.h"
 #include "loguru.hpp"
 #include <inttypes.h>
 #include <getopt.h>
+
+CPluginContext gPluginContext;
 
 enum CmdLineOptsTy {
   clOptHelp = 1,
@@ -363,11 +365,33 @@ int main(int argc, char **argv)
 
   context.CoinInfo = CCoinLibrary::get(coin.c_str());
   if (context.CoinInfo.Name.empty()) {
-    LOG_F(ERROR, "Unknown coin: %s", coin.c_str());
-    return 1;
+    // load coin info from extra directory
+    bool foundInExtra = false;
+    for (const auto &proc: gPluginContext.AddExtraCoinProcs) {
+      if (proc(coin.c_str(), context.CoinInfo)) {
+        foundInExtra = true;
+        break;
+      }
+    }
+
+    if (!foundInExtra) {
+      LOG_F(ERROR, "Unknown coin: %s", coin.c_str());
+      return 1;
+    }
   }
 
   // Create node
+  CNodeConfig nodeConfig;
+  PoolBackendConfig config;
+
+  nodeConfig.Address = address;
+  nodeConfig.Login = user;
+  nodeConfig.Password = password;
+  nodeConfig.Wallet = wallet;
+
+  for (size_t i = 0, ie = miningAddresses.size(); i != ie; ++i)
+    config.MiningAddresses.add(CMiningAddress(miningAddresses[i], !privateKeys.empty() ? privateKeys[i] : ""), 1);
+
   if (type == "bitcoinrpc") {
     if (!user || !password) {
       fprintf(stderr, "Error: you must specify --user and --password\n");
@@ -381,13 +405,19 @@ int main(int argc, char **argv)
       exit(1);
     }
 
-    PoolBackendConfig config;
-    for (size_t i = 0, ie = miningAddresses.size(); i != ie; ++i)
-      config.MiningAddresses.add(CMiningAddress(miningAddresses[i], !privateKeys.empty() ? privateKeys[i] : ""), 1);
     context.Client.reset(new CEthereumRpcClient(context.Base, 1, context.CoinInfo, address, config));
   } else {
-    LOG_F(ERROR, "unknown client type: %s", type.c_str());
-    return 1;
+    // lookup client type in extras
+    for (const auto &proc: gPluginContext.AddRpcClientForTerminalProcs) {
+      context.Client.reset(proc(type, context.Base, 1, context.CoinInfo, nodeConfig, config, method, miningAddresses, privateKeys));
+      if (context.Client)
+        break;
+    }
+
+    if (!context.Client) {
+      LOG_F(ERROR, "Unknown node type: %s", type.c_str());
+      return 1;
+    }
   }
 
   if (method == "getBalance") {

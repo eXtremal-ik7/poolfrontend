@@ -10,7 +10,7 @@
 #include "poolcore/thread.h"
 #include "poolcommon/utils.h"
 #include "poolinstances/fabric.h"
-#include "poolinstances/stratum.h"
+#include "plugin.h"
 
 #include "asyncio/asyncio.h"
 #include "asyncio/socket.h"
@@ -60,6 +60,8 @@ struct PoolContext {
   std::unique_ptr<PoolHttpServer> HttpServer;
   std::unique_ptr<ComplexMiningStats> MiningStats;
 };
+
+CPluginContext gPluginContext;
 
 std::filesystem::path userHomeDir()
 {
@@ -211,8 +213,19 @@ int main(int argc, char *argv[])
       const char *coinName = coin.Name.c_str();
       CCoinInfo coinInfo = CCoinLibrary::get(coinName);
       if (coinInfo.Name.empty()) {
-        LOG_F(ERROR, "Unknown coin: %s", coinName);
-        return 1;
+        // load coin info from extra directory
+        bool foundInExtra = false;
+        for (const auto &proc: gPluginContext.AddExtraCoinProcs) {
+          if (proc(coinName, coinInfo)) {
+            foundInExtra = true;
+            break;
+          }
+        }
+
+        if (!foundInExtra) {
+          LOG_F(ERROR, "Unknown coin: %s", coinName);
+          return 1;
+        }
       }
 
       poolContext.CoinList.push_back(coinInfo);
@@ -283,8 +296,17 @@ int main(int argc, char *argv[])
         } else if (node.Type == "ethereumrpc") {
           client = new CEthereumRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), backendConfig);
         } else {
-          LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
-          return 1;
+          // lookup client type in extras
+          for (const auto &proc: gPluginContext.AddRpcClientProcs) {
+            client = proc(node.Type, monitorBase, totalThreadsNum, coinInfo, node, backendConfig);
+            if (client)
+              break;
+          }
+
+          if (!client) {
+            LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
+            return 1;
+          }
         }
 
         dispatcher->addGetWorkClient(client);
@@ -298,8 +320,17 @@ int main(int argc, char *argv[])
         } else if (node.Type == "ethereumrpc") {
           client = new CEthereumRpcClient(monitorBase, totalThreadsNum, coinInfo, node.Address.c_str(), backendConfig);
         } else {
-          LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
-          return 1;
+          // lookup client type in extras
+          for (const auto &proc: gPluginContext.AddRpcClientProcs) {
+            client = proc(node.Type, monitorBase, totalThreadsNum, coinInfo, node, backendConfig);
+            if (client)
+              break;
+          }
+
+          if (!client) {
+            LOG_F(ERROR, "Unknown node type: %s", node.Type.c_str());
+            return 1;
+          }
         }
 
         dispatcher->addRPCClient(client);
@@ -337,7 +368,9 @@ int main(int argc, char *argv[])
     std::sort(poolContext.Backends.begin(), poolContext.Backends.end(), [](const auto &l, const auto &r) { return l->getCoinInfo().Name < r->getCoinInfo().Name; });
 
     // Initialize "complex mining stats" service
-    poolContext.MiningStats.reset(new ComplexMiningStats);
+    poolContext.MiningStats.reset(!gPluginContext.HasMiningStatsHandler ?
+      new ComplexMiningStats :
+      gPluginContext.CreateMiningStatsHandlerProc(poolContext.Backends, poolContext.DatabasePath));
 
     // Initialize workers
     poolContext.ThreadPool.reset(new CThreadPool(workerThreadsNum));
@@ -362,8 +395,17 @@ int main(int argc, char *argv[])
 
       CPoolInstance *instance = PoolInstanceFabric::get(monitorBase, *poolContext.UserMgr, linkedBackends, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig, poolContext.PriceFetcher.get());
       if (!instance) {
-        LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
-        return 1;
+        // Try create pool instances using extras
+        for (const auto &proc: gPluginContext.CreatePoolInstanceProcs) {
+          instance = proc(monitorBase, *poolContext.UserMgr, linkedBackends, *poolContext.ThreadPool, instanceConfig.Type, instanceConfig.Protocol, static_cast<unsigned>(instIdx), static_cast<unsigned>(instIdxE), instanceConfig.InstanceConfig, poolContext.PriceFetcher.get());
+          if (instance)
+            break;
+        }
+
+        if (!instance) {
+          LOG_F(ERROR, "Can't create instance with type '%s' and prorotol '%s'", instanceConfig.Type.c_str(), instanceConfig.Protocol.c_str());
+          return 1;
+        }
       }
 
       instance->setComplexMiningStats(poolContext.MiningStats.get());
@@ -385,7 +427,10 @@ int main(int argc, char *argv[])
       poolContext.Instances[instIdx].reset(instance);
     }
   }
-    
+
+  // Start "complex mining stats"
+  poolContext.MiningStats->start();
+
   // Start workers
   poolContext.ThreadPool->start();
 

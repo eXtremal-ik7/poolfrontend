@@ -84,6 +84,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   )
 endif()
 
+# Build plugins from extra directory
+set(POOLFRONTEND_EXTRAS "")
+file(GLOB EXTRA_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/extra/*")
+foreach(EXTRA_DIR ${EXTRA_DIRS})
+  if(IS_DIRECTORY ${EXTRA_DIR} AND EXISTS "${EXTRA_DIR}/CMakeLists.txt")
+    add_subdirectory(${EXTRA_DIR})
+  endif()
+endforeach()
+
 # Pool frontend main executable
 add_executable(poolfrontend 
   config.cpp
@@ -92,7 +101,7 @@ add_executable(poolfrontend
   ${GETOPT_SOURCES}
 )
 
-target_link_libraries(poolfrontend ${LIBRARIES})
+target_link_libraries(poolfrontend ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
 
 # Node rpc (test node rpc)
 add_executable(noderpc
@@ -100,7 +109,7 @@ add_executable(noderpc
   ${GETOPT_SOURCES}
 )
 
-target_link_libraries(noderpc ${LIBRARIES})
+target_link_libraries(noderpc ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
 
 # Password hasher
 add_executable(passwordhash

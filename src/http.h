@@ -9,7 +9,7 @@ class PoolHttpServer;
 
 class PoolHttpConnection {
 public:
-  PoolHttpConnection(PoolHttpServer &server, HostAddress address, aioObject *socket) : Server_(server), Address_(address), Socket_(socket) {
+  PoolHttpConnection(PoolHttpServer &server, aioObject *socket) : Server_(server), Socket_(socket) {
     httpRequestParserInit(&ParserState);
     objectSetDestructorCb(aioObjectHandle(Socket_), [](aioObjectRoot*, void *arg) {
       delete static_cast<PoolHttpConnection*>(arg);
@@ -36,6 +36,7 @@ private:
   void onUserResendEmail(rapidjson::Document &document);
   void onUserLogin(rapidjson::Document &document);
   void onUserLogout(rapidjson::Document &document);
+  void onUserQueryMonitoringSession(rapidjson::Document &document);
   void onUserChangeEmail(rapidjson::Document &document);
   void onUserChangePasswordInitiate(rapidjson::Document &document);
   void onUserChangePasswordForce(rapidjson::Document &document);
@@ -85,6 +86,7 @@ private:
     fnUserResendEmail,
     fnUserLogin,
     fnUserLogout,
+    fnUserQueryMonitoringSession,
     fnUserChangeEmail,
     fnUserChangePasswordInitiate,
     fnUserChangePasswordForce,
@@ -128,7 +130,6 @@ private:
   static std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> FunctionNameMap_;
 
   PoolHttpServer &Server_;
-  HostAddress Address_;
   aioObject *Socket_;
 
   char buffer[65536];
@@ -180,7 +181,7 @@ public:
   ComplexMiningStats &miningStats() { return MiningStats_; }
 
 private:
-  static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg);
+  static void acceptCb(AsyncOpStatus status, aioObject *object, HostAddress, socketTy socketFd, void *arg);
 
   void onAccept(AsyncOpStatus status, aioObject *object);
 

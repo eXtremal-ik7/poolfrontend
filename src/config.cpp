@@ -95,20 +95,6 @@ static inline void jsonParseUInt(const rapidjson::Value &value, const char *name
   }
 }
 
-static inline void jsonParseFloat(const rapidjson::Value &value, const char *name, float *out, EErrorType *validAcc, const std::string &place, std::string &errorDescription) {
-  if (*validAcc != EOk)
-    return;
-
-  if (value.HasMember(name)) {
-    if (value[name].IsFloat())
-      *out = value[name].GetFloat();
-    else
-      setErrorDescription(ETypeMismatch, validAcc, place, name, "floating point number (like 1.0)", errorDescription);
-  } else {
-    setErrorDescription(ENotExists, validAcc, place, name, "floating point number (like 1.0)", errorDescription);
-  }
-}
-
 static inline void jsonParseDouble(const rapidjson::Value &value, const char *name, double *out, EErrorType *validAcc, const std::string &place, std::string &errorDescription) {
   if (*validAcc != EOk)
     return;

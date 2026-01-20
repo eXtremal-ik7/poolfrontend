@@ -15,6 +15,7 @@ std::unordered_map<std::string, std::pair<int, PoolHttpConnection::FunctionTy>> 
   {"userResendEmail", {hmPost, fnUserResendEmail}},
   {"userLogin", {hmPost, fnUserLogin}},
   {"userLogout", {hmPost, fnUserLogout}},
+  {"userQueryMonitoringSession", {hmPost, fnUserQueryMonitoringSession}},
   {"userChangeEmail", {hmPost, fnUserChangeEmail}},
   {"userChangePasswordForce", {hmPost, fnUserChangePasswordForce}},
   {"userChangePasswordInitiate", {hmPost, fnUserChangePasswordInitiate}},
@@ -82,6 +83,7 @@ static inline void jsonParseInt64(rapidjson::Value &document, const char *name, 
     *validAcc = false;
 }
 
+
 static inline void jsonParseInt64(rapidjson::Value &document, const char *name, int64_t *out, int64_t defaultValue, bool *validAcc) {
   if (document.HasMember(name)) {
     if (document[name].IsInt64())
@@ -142,17 +144,6 @@ static inline void jsonParseNumber(rapidjson::Value &document, const char *name,
       *validAcc = false;
   } else {
     *validAcc = false;
-  }
-}
-
-static inline void jsonParseNumber(rapidjson::Value &document, const char *name, double *out, double defaultValue, bool *validAcc) {
-  if (document.HasMember(name)) {
-    if (document[name].IsNumber())
-      *out = document[name].GetDouble();
-    else
-      *validAcc = false;
-  } else {
-    *out = defaultValue;
   }
 }
 
@@ -256,6 +247,7 @@ int PoolHttpConnection::onParse(HttpRequestComponent *component)
       case fnUserResendEmail: onUserResendEmail(document); break;
       case fnUserLogin: onUserLogin(document); break;
       case fnUserLogout: onUserLogout(document); break;
+      case fnUserQueryMonitoringSession: onUserQueryMonitoringSession(document); break;
       case fnUserChangeEmail: onUserChangeEmail(document); break;
       case fnUserChangePasswordInitiate: onUserChangePasswordInitiate(document); break;
       case fnUserChangePasswordForce: onUserChangePasswordForce(document); break;
@@ -373,7 +365,7 @@ void PoolHttpConnection::finishChunk(xmstream &stream, size_t offset)
 {
   char hex[16];
   char finishData[] = "\r\n0\r\n\r\n";
-  sprintf(hex, "%08x", static_cast<unsigned>(stream.offsetOf() - offset - 10));
+  snprintf(hex, sizeof(hex), "%08x", static_cast<unsigned>(stream.offsetOf() - offset - 10));
   memcpy(stream.data<uint8_t>() + offset, hex, 8);
   stream.write(finishData, sizeof(finishData));
 }
@@ -419,16 +411,16 @@ void PoolHttpConnection::onUserCreate(rapidjson::Document &document)
     return;
   }
 
-  std::string login;
+  UserManager::UserWithAccessRights tokenInfo;
   if (!sessionId.empty()) {
-    if (!Server_.userManager().validateSession(sessionId, "", login, false)) {
+    if (!Server_.userManager().validateSession(sessionId, "", tokenInfo, false)) {
       replyWithStatus("unknown_id");
       return;
     }
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  Server_.userManager().userCreate(login, std::move(credentials), [this](const char *status) {
+  Server_.userManager().userCreate(tokenInfo.Login, std::move(credentials), [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
@@ -499,6 +491,36 @@ void PoolHttpConnection::onUserLogout(rapidjson::Document &document)
   });
 }
 
+void PoolHttpConnection::onUserQueryMonitoringSession(rapidjson::Document &document)
+{
+  bool validAcc = true;
+  std::string sessionId;
+  std::string targetLogin;
+  jsonParseString(document, "id", sessionId, &validAcc);
+  jsonParseString(document, "targetLogin", targetLogin, "", &validAcc);
+  if (!validAcc) {
+    replyWithStatus("json_format_error");
+    return;
+  }
+
+  objectIncrementReference(aioObjectHandle(Socket_), 1);
+  Server_.userManager().userQueryMonitoringSession(sessionId, targetLogin, [this](const std::string &sessionId, const char *status) {
+    xmstream stream;
+    reply200(stream);
+    size_t offset = startChunk(stream);
+
+    {
+      JSON::Object result(stream);
+      result.addString("status", status);
+      result.addString("sessionid", sessionId);
+    }
+
+    finishChunk(stream, offset);
+    aioWrite(Socket_, stream.data(), stream.sizeOf(), afWaitAll, 0, writeCb, this);
+    objectDecrementReference(aioObjectHandle(Socket_), 1);
+  });
+}
+
 void PoolHttpConnection::onUserChangeEmail(rapidjson::Document&)
 {
   xmstream stream;
@@ -563,18 +585,19 @@ void PoolHttpConnection::onUserGetCredentials(rapidjson::Document &document)
   reply200(stream);
   size_t offset = startChunk(stream);
 
-  std::string login;
+  UserManager::UserWithAccessRights tokenInfo;
   UserManager::Credentials credentials;
-  if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  if (Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     JSON::Object result(stream);
-    if (Server_.userManager().getUserCredentials(login, credentials)) {
+    if (Server_.userManager().getUserCredentials(tokenInfo.Login, credentials)) {
       result.addString("status", "ok");
-      result.addString("login", login);
+      result.addString("login", tokenInfo.Login);
       result.addString("name", credentials.Name);
       result.addString("email", credentials.EMail);
       result.addInt("registrationDate", credentials.RegistrationDate);
       result.addBoolean("isActive", credentials.IsActive);
-      result.addBoolean("isReadOnly", credentials.IsReadOnly);
+      // We return readonly flag if user or session has it
+      result.addBoolean("isReadOnly", tokenInfo.IsReadOnly | credentials.IsReadOnly);
       result.addBoolean("has2fa", credentials.HasTwoFactor);
     } else {
       result.addString("status", "unknown_id");
@@ -606,8 +629,8 @@ void PoolHttpConnection::onUserGetSettings(rapidjson::Document &document)
 
   {
     JSON::Object object(stream);
-    std::string login;
-    if (Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+    UserManager::UserWithAccessRights tokenInfo;
+    if (Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
       object.addString("status", "ok");
       object.addField("coins");
       JSON::Array coins(stream);
@@ -616,7 +639,7 @@ void PoolHttpConnection::onUserGetSettings(rapidjson::Document &document)
         JSON::Object coin(stream);
         UserSettingsRecord settings;
         coin.addString("name", coinInfo.Name.c_str());
-        if (Server_.userManager().getUserCoinSettings(login, coinInfo.Name, settings)) {
+        if (Server_.userManager().getUserCoinSettings(tokenInfo.Login, coinInfo.Name, settings)) {
           coin.addString("address", settings.Address);
           coin.addString("payoutThreshold", FormatMoney(settings.MinimalPayout, coinInfo.RationalPartSize));
           coin.addBoolean("autoPayoutEnabled", settings.AutoPayout);
@@ -663,6 +686,7 @@ void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)
   bool validAcc = true;
   std::string sessionId;
   std::string targetLogin;
+  UserManager::UserWithAccessRights tokenInfo;
   UserSettingsRecord settings;
   std::string payoutThreshold;
   std::string totp;
@@ -695,10 +719,12 @@ void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)
     return;
   }
 
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, settings.Login, true)) {
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, true)) {
     replyWithStatus("unknown_id");
     return;
   }
+
+  settings.Login = tokenInfo.Login;
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
   Server_.userManager().updateSettings(std::move(settings), totp, [this](const char *status) {
@@ -1011,7 +1037,7 @@ void PoolHttpConnection::onBackendManualPayout(rapidjson::Document &document)
   }
 
   // id -> login
-  std::string login;
+  UserManager::UserWithAccessRights login;
   if (!Server_.userManager().validateSession(sessionId, targetLogin, login, true)) {
     replyWithStatus("unknown_id");
     return;
@@ -1024,7 +1050,7 @@ void PoolHttpConnection::onBackendManualPayout(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->accountingDb()->manualPayout(login, [this](const char *status) {
+  backend->accountingDb()->manualPayout(login.Login, [this](const char *status) {
     replyWithStatus(status);
     objectDecrementReference(aioObjectHandle(Socket_), 1);
   });
@@ -1045,8 +1071,8 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
   }
 
   // id -> login
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1059,7 +1085,7 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
     }
 
     objectIncrementReference(aioObjectHandle(Socket_), 1);
-    backend->accountingDb()->queryUserBalance(login, [this, backend](const AccountingDb::UserBalanceInfo &record) {
+    backend->accountingDb()->queryUserBalance(tokenInfo.Login, [this, backend](const AccountingDb::UserBalanceInfo &record) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -1094,7 +1120,7 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
     for (size_t i = 0, ie = Server_.backends().size(); i != ie; ++i)
       accountingDbs[i] = Server_.backend(i)->accountingDb();
 
-    AccountingDb::queryUserBalanceMulti(&accountingDbs[0], accountingDbs.size(), login, [this](const AccountingDb::UserBalanceInfo *balanceData, size_t backendsNum) {
+    AccountingDb::queryUserBalanceMulti(&accountingDbs[0], accountingDbs.size(), tokenInfo.Login, [this](const AccountingDb::UserBalanceInfo *balanceData, size_t backendsNum) {
       xmstream stream;
       reply200(stream);
       size_t offset = startChunk(stream);
@@ -1165,8 +1191,8 @@ void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
   }
 
   // id -> login
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1178,7 +1204,7 @@ void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  statistic->queryUserStats(login, [this, statistic](const StatisticDb::CStats &aggregate, const std::vector<StatisticDb::CStats> &workers) {
+  statistic->queryUserStats(tokenInfo.Login, [this, statistic](const StatisticDb::CStats &aggregate, const std::vector<StatisticDb::CStats> &workers) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -1282,8 +1308,8 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory(rapidjson::Document &doc
   }
 
   // id -> login
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1294,7 +1320,7 @@ void PoolHttpConnection::onBackendQueryUserStatsHistory(rapidjson::Document &doc
     return;
   }
 
-  queryStatsHistory(statistic, login, "", timeFrom, timeTo, groupByInterval, currentTime);
+  queryStatsHistory(statistic, tokenInfo.Login, "", timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryWorkerStatsHistory(rapidjson::Document &document)
@@ -1322,8 +1348,8 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory(rapidjson::Document &d
   }
 
   // id -> login
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1334,7 +1360,7 @@ void PoolHttpConnection::onBackendQueryWorkerStatsHistory(rapidjson::Document &d
     return;
   }
 
-  queryStatsHistory(statistic, login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
+  queryStatsHistory(statistic, tokenInfo.Login, workerId, timeFrom, timeTo, groupByInterval, currentTime);
 }
 
 void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
@@ -1441,8 +1467,8 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
   }
 
   // id -> login
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1454,7 +1480,7 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
   }
 
   std::vector<PayoutDbRecord> records;
-  backend->queryPayouts(login, timeFrom, count, records);
+  backend->queryPayouts(tokenInfo.Login, timeFrom, count, records);
   xmstream stream;
   reply200(stream);
   size_t offset = startChunk(stream);
@@ -1625,8 +1651,8 @@ void PoolHttpConnection::onBackendQueryProfitSwitchCoeff(rapidjson::Document &do
     return;
   }
 
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin" && login != "observer")) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, "", tokenInfo, false) || (tokenInfo.Login != "admin" && tokenInfo.Login != "observer")) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1676,8 +1702,8 @@ void PoolHttpConnection::onBackendQueryPPLNSPayouts(rapidjson::Document &documen
     return;
   }
 
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1689,7 +1715,7 @@ void PoolHttpConnection::onBackendQueryPPLNSPayouts(rapidjson::Document &documen
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->accountingDb()->queryPPLNSPayouts(login, timeFrom, hashFrom, count, [this, backend](const std::vector<CPPLNSPayout>& result) {
+  backend->accountingDb()->queryPPLNSPayouts(tokenInfo.Login, timeFrom, hashFrom, count, [this, backend](const std::vector<CPPLNSPayout>& result) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -1740,8 +1766,8 @@ void PoolHttpConnection::onBackendQueryPPLNSAcc(rapidjson::Document &document)
     return;
   }
 
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, targetLogin, login, false)) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, targetLogin, tokenInfo, false)) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1762,7 +1788,7 @@ void PoolHttpConnection::onBackendQueryPPLNSAcc(rapidjson::Document &document)
   }
 
   objectIncrementReference(aioObjectHandle(Socket_), 1);
-  backend->accountingDb()->queryPPLNSAcc(login, timeFrom, timeTo, groupByInterval, [this, backend](const std::vector<AccountingDb::CPPLNSPayoutAcc>& result) {
+  backend->accountingDb()->queryPPLNSAcc(tokenInfo.Login, timeFrom, timeTo, groupByInterval, [this, backend](const std::vector<AccountingDb::CPPLNSPayoutAcc>& result) {
     xmstream stream;
     reply200(stream);
     size_t offset = startChunk(stream);
@@ -1806,8 +1832,8 @@ void PoolHttpConnection::onBackendUpdateProfitSwitchCoeff(rapidjson::Document &d
     return;
   }
 
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin")) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, "", tokenInfo, false) || (tokenInfo.Login != "admin")) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -1921,8 +1947,8 @@ void PoolHttpConnection::onComplexMiningStatsGetInfo(rapidjson::Document &docume
     return;
   }
 
-  std::string login;
-  if (!Server_.userManager().validateSession(sessionId, "", login, false) || (login != "admin")) {
+  UserManager::UserWithAccessRights tokenInfo;
+  if (!Server_.userManager().validateSession(sessionId, "", tokenInfo, false) || (tokenInfo.Login != "admin")) {
     replyWithStatus("unknown_id");
     return;
   }
@@ -2012,11 +2038,11 @@ void PoolHttpServer::stop()
 }
 
 
-void PoolHttpServer::acceptCb(AsyncOpStatus status, aioObject *object, HostAddress address, socketTy socketFd, void *arg)
+void PoolHttpServer::acceptCb(AsyncOpStatus status, aioObject *object, HostAddress, socketTy socketFd, void *arg)
 {
   if (status == aosSuccess) {
     aioObject *connectionSocket = newSocketIo(aioGetBase(object), socketFd);
-    PoolHttpConnection *connection = new PoolHttpConnection(*static_cast<PoolHttpServer*>(arg), address, connectionSocket);
+    PoolHttpConnection *connection = new PoolHttpConnection(*static_cast<PoolHttpServer*>(arg), connectionSocket);
     connection->run();
   } else {
     LOG_F(ERROR, "HTTP api accept connection failed");

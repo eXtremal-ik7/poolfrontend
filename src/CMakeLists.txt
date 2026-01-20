@@ -58,7 +58,6 @@ include_directories(
 
 set(LIBRARIES
   poolcore
-  poolinstances
   blockmaker
   poolcommon
   loguru
@@ -94,14 +93,14 @@ foreach(EXTRA_DIR ${EXTRA_DIRS})
 endforeach()
 
 # Pool frontend main executable
-add_executable(poolfrontend 
+add_executable(poolfrontend
   config.cpp
   main.cpp
   http.cpp
   ${GETOPT_SOURCES}
 )
 
-target_link_libraries(poolfrontend ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
+target_link_libraries(poolfrontend ${POOLFRONTEND_EXTRAS} poolinstances ${LIBRARIES})
 
 # Node rpc (test node rpc)
 add_executable(noderpc

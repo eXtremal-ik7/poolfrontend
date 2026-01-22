@@ -1,5 +1,4 @@
 #include "poolcore/usermgr.h"
-#include "poolcommon/uint256.h"
 
 int main(int argc, char **argv)
 {
@@ -8,6 +7,6 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  printf("%s\n", UserManager::generateHash(argv[1], argv[2]).ToString().c_str());
+  printf("%s\n", UserManager::generateHash(argv[1], argv[2]).getHexLE().c_str());
   return 0;
 }

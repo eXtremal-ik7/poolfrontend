@@ -6,6 +6,7 @@
 
 #include "poolcore/backend.h"
 #include "poolcore/coinLibrary.h"
+#include "poolcore/dbFormat.h"
 #include "poolcore/clientDispatcher.h"
 #include "poolcore/thread.h"
 #include "poolcommon/utils.h"
@@ -140,6 +141,17 @@ int main(int argc, char *argv[])
       loguru::add_file((poolContext.DatabasePath / logFileName).generic_string().c_str(), loguru::Append, loguru::Verbosity_1);
     }
 
+    // Check for outdated database format
+    {
+      std::vector<std::string> coinNames;
+      for (const auto &coin : config.Coins)
+        coinNames.push_back(coin.Name);
+      if (isDbFormatOutdated(poolContext.DatabasePath, coinNames)) {
+        LOG_F(ERROR, "database needs to be manually updated with migrate tool");
+        return 1;
+      }
+    }
+
     // Analyze config
     poolContext.IsMaster = config.IsMaster;
     poolContext.HttpPort = config.HttpPort;
@@ -247,12 +259,12 @@ int main(int argc, char *argv[])
       backendConfig.dbPath = poolContext.DatabasePath / coinInfo.Name;
 
       // Backend parameters
-      if (!parseMoneyValue(coinConfig.DefaultPayoutThreshold.c_str(), coinInfo.RationalPartSize, &backendConfig.DefaultPayoutThreshold)) {
+      if (!parseMoneyValue(coinConfig.DefaultPayoutThreshold.c_str(), coinInfo.FractionalPartSize, &backendConfig.DefaultPayoutThreshold)) {
         LOG_F(ERROR, "Can't load 'defaultPayoutThreshold' from %s coin config", coinName);
         return 1;
       }
 
-      if (!parseMoneyValue(coinConfig.MinimalAllowedPayout.c_str(), coinInfo.RationalPartSize, &backendConfig.MinimalAllowedPayout)) {
+      if (!parseMoneyValue(coinConfig.MinimalAllowedPayout.c_str(), coinInfo.FractionalPartSize, &backendConfig.MinimalAllowedPayout)) {
         LOG_F(ERROR, "Can't load 'minimalPayout' from %s coin config", coinName);
         return 1;
       }
@@ -339,10 +351,9 @@ int main(int argc, char *argv[])
       // Initialize backend
       PoolBackend *backend = new PoolBackend(createAsyncBase(amOSDefault), std::move(backendConfig), coinInfo, *poolContext.UserMgr, *dispatcher, *poolContext.PriceFetcher);
 
+      poolContext.Backends.emplace_back(backend);
       if (coinConfig.ProfitSwitchCoeff != 0.0)
         backend->setProfitSwitchCoeff(coinConfig.ProfitSwitchCoeff);
-
-      poolContext.Backends.emplace_back(backend);
       poolContext.ClientDispatchers.emplace_back(dispatcher.release());
       poolContext.UserMgr->configAddCoin(coinInfo, backendConfig.DefaultPayoutThreshold);
 

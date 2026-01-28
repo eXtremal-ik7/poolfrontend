@@ -641,7 +641,7 @@ void PoolHttpConnection::onUserGetSettings(rapidjson::Document &document)
         coin.addString("name", coinInfo.Name.c_str());
         if (Server_.userManager().getUserCoinSettings(tokenInfo.Login, coinInfo.Name, settings)) {
           coin.addString("address", settings.Address);
-          coin.addString("payoutThreshold", FormatMoney(settings.MinimalPayout, coinInfo.RationalPartSize));
+          coin.addString("payoutThreshold", FormatMoney(settings.MinimalPayout, coinInfo.FractionalPartSize));
           coin.addBoolean("autoPayoutEnabled", settings.AutoPayout);
         } else {
           coin.addNull("address");
@@ -709,7 +709,7 @@ void PoolHttpConnection::onUserUpdateSettings(rapidjson::Document &document)
   }
 
   CCoinInfo &coinInfo = Server_.userManager().coinInfo()[It->second];
-  if (!parseMoneyValue(payoutThreshold.c_str(), coinInfo.RationalPartSize, &settings.MinimalPayout)) {
+  if (!parseMoneyValue(payoutThreshold.c_str(), coinInfo.FractionalPartSize, &settings.MinimalPayout)) {
     replyWithStatus("request_format_error");
     return;
   }
@@ -1100,10 +1100,10 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
           {
             JSON::Object balance(stream);
             balance.addString("coin", coinInfo.Name);
-            balance.addString("balance", FormatMoney(record.Data.Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
-            balance.addString("requested", FormatMoney(record.Data.Requested, coinInfo.RationalPartSize));
-            balance.addString("paid", FormatMoney(record.Data.Paid, coinInfo.RationalPartSize));
-            balance.addString("queued", FormatMoney(record.Queued, coinInfo.RationalPartSize));
+            balance.addString("balance", FormatMoney(record.Data.Balance, coinInfo.FractionalPartSize));
+            balance.addString("requested", FormatMoney(record.Data.Requested, coinInfo.FractionalPartSize));
+            balance.addString("paid", FormatMoney(record.Data.Paid, coinInfo.FractionalPartSize));
+            balance.addString("queued", FormatMoney(record.Queued, coinInfo.FractionalPartSize));
           }
         }
       }
@@ -1136,10 +1136,10 @@ void PoolHttpConnection::onBackendQueryUserBalance(rapidjson::Document &document
             {
               JSON::Object balance(stream);
               balance.addString("coin", coinInfo.Name);
-              balance.addString("balance", FormatMoney(balanceData[i].Data.Balance.getRational(coinInfo.ExtraMultiplier), coinInfo.RationalPartSize));
-              balance.addString("requested", FormatMoney(balanceData[i].Data.Requested, coinInfo.RationalPartSize));
-              balance.addString("paid", FormatMoney(balanceData[i].Data.Paid, coinInfo.RationalPartSize));
-              balance.addString("queued", FormatMoney(balanceData[i].Queued, coinInfo.RationalPartSize));
+              balance.addString("balance", FormatMoney(balanceData[i].Data.Balance, coinInfo.FractionalPartSize));
+              balance.addString("requested", FormatMoney(balanceData[i].Data.Requested, coinInfo.FractionalPartSize));
+              balance.addString("paid", FormatMoney(balanceData[i].Data.Paid, coinInfo.FractionalPartSize));
+              balance.addString("queued", FormatMoney(balanceData[i].Queued, coinInfo.FractionalPartSize));
             }
           }
         }
@@ -1221,7 +1221,7 @@ void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
         total.addInt("clients", aggregate.ClientsNum);
         total.addInt("workers", aggregate.WorkersNum);
         total.addDouble("shareRate", aggregate.SharesPerSecond);
-        total.addDouble("shareWork", aggregate.SharesWork);
+        total.addString("shareWork", aggregate.SharesWork.getDecimal());
         total.addInt("power", aggregate.AveragePower);
         total.addInt("lastShareTime", aggregate.LastShareTime);
       }
@@ -1235,7 +1235,7 @@ void PoolHttpConnection::onBackendQueryUserStats(rapidjson::Document &document)
             JSON::Object workerOutput(stream);
             workerOutput.addString("name", workers[i].WorkerId);
             workerOutput.addDouble("shareRate", workers[i].SharesPerSecond);
-            workerOutput.addDouble("shareWork", workers[i].SharesWork);
+            workerOutput.addString("shareWork", workers[i].SharesWork.getDecimal());
             workerOutput.addInt("power", workers[i].AveragePower);
             workerOutput.addInt("lastShareTime", workers[i].LastShareTime);
           }
@@ -1274,7 +1274,7 @@ void PoolHttpConnection::queryStatsHistory(StatisticDb *statistic, const std::st
           workerOutput.addString("name", stats[i].WorkerId);
           workerOutput.addInt("time", stats[i].Time);
           workerOutput.addDouble("shareRate", stats[i].SharesPerSecond);
-          workerOutput.addDouble("shareWork", stats[i].SharesWork);
+          workerOutput.addString("shareWork", stats[i].SharesWork.getDecimal());
           workerOutput.addInt("power", stats[i].AveragePower);
         }
       }
@@ -1381,7 +1381,7 @@ void PoolHttpConnection::onBackendQueryCoins(rapidjson::Document&)
         object.addString("name", info.Name);
         object.addString("fullName", info.FullName);
         object.addString("algorithm", info.Algorithm);
-        object.addString("minimalPayout", FormatMoney(backend->getConfig().MinimalAllowedPayout, info.RationalPartSize));
+        object.addString("minimalPayout", FormatMoney(backend->getConfig().MinimalAllowedPayout, info.FractionalPartSize));
         // TODO: calculate fee for current user
         object.addDouble("totalFee", 0.0);
       }
@@ -1435,7 +1435,7 @@ void PoolHttpConnection::onBackendQueryFoundBlocks(rapidjson::Document &document
             block.addString("hash", !blocks[i].PublicHash.empty() ? blocks[i].PublicHash : blocks[i].Hash);
             block.addInt("time", blocks[i].Time);
             block.addInt("confirmations", confirmations[i].Confirmations);
-            block.addString("generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.RationalPartSize));
+            block.addString("generatedCoins", FormatMoney(blocks[i].AvailableCoins, coinInfo.FractionalPartSize));
             block.addString("foundBy", blocks[i].FoundBy);
           }
         }
@@ -1497,7 +1497,7 @@ void PoolHttpConnection::onBackendQueryPayouts(rapidjson::Document &document)
           JSON::Object payout(stream);
           payout.addInt("time", records[i].Time);
           payout.addString("txid", records[i].TransactionId);
-          payout.addString("value", FormatMoney(records[i].Value, backend->getCoinInfo().RationalPartSize));
+          payout.addString("value", FormatMoney(records[i].Value, backend->getCoinInfo().FractionalPartSize));
           payout.addInt("status", records[i].Status);
         }
       }
@@ -1558,7 +1558,7 @@ void PoolHttpConnection::onBackendQueryPoolStats(rapidjson::Document &document)
             statsObject.addInt("clients", record.ClientsNum);
             statsObject.addInt("workers", record.WorkersNum);
             statsObject.addDouble("shareRate", record.SharesPerSecond);
-            statsObject.addDouble("shareWork", record.SharesWork);
+            statsObject.addString("shareWork", record.SharesWork.getDecimal());
             statsObject.addInt("power", record.AveragePower);
             statsObject.addInt("lastShareTime", record.LastShareTime);
           }
@@ -1599,7 +1599,7 @@ void PoolHttpConnection::onBackendQueryPoolStats(rapidjson::Document &document)
               statsObject.addInt("clients", stats[i].ClientsNum);
               statsObject.addInt("workers", stats[i].WorkersNum);
               statsObject.addDouble("shareRate", stats[i].SharesPerSecond);
-              statsObject.addDouble("shareWork", stats[i].SharesWork);
+              statsObject.addString("shareWork", stats[i].SharesWork.getDecimal());
               statsObject.addInt("power", stats[i].AveragePower);
             }
           }
@@ -1733,7 +1733,7 @@ void PoolHttpConnection::onBackendQueryPPLNSPayouts(rapidjson::Document &documen
             payoutObject.addInt("endTime", payout.RoundEndTime);
             payoutObject.addString("hash", payout.BlockHash);
             payoutObject.addInt("height", payout.BlockHeight);
-            payoutObject.addString("value", FormatMoney(payout.PayoutValue, backend->getCoinInfo().RationalPartSize));
+            payoutObject.addString("value", FormatMoney(payout.PayoutValue, backend->getCoinInfo().FractionalPartSize));
             payoutObject.addDouble("coinBtcRate", fnormalize(payout.RateToBTC));
             payoutObject.addDouble("btcUsdRate", fnormalize(payout.RateBTCToUSD));
           }
@@ -1803,9 +1803,9 @@ void PoolHttpConnection::onBackendQueryPPLNSAcc(rapidjson::Document &document)
           {
             JSON::Object payoutObject(stream);
             payoutObject.addInt("timeLabel", payout.IntervalEnd);
-            payoutObject.addString("value", FormatMoney(payout.TotalCoin, backend->getCoinInfo().RationalPartSize));
-            payoutObject.addString("valueBTC", FormatMoney(payout.TotalBTC, 100000000));
-            payoutObject.addDouble("valueUSD", fnormalize(payout.TotalUSD));
+            payoutObject.addString("value", FormatMoney(payout.TotalCoin, backend->getCoinInfo().FractionalPartSize));
+            payoutObject.addString("valueBTC", FormatMoney(payout.TotalBTC, 8));
+            payoutObject.addString("valueUSD", FormatMoney(payout.TotalUSD, 8));
             payoutObject.addInt("avghashrate", payout.AvgHashRate);
           }
         }

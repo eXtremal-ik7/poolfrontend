@@ -9,6 +9,7 @@
 
 // Plugin callbacks
 using FAddExtraCoin = std::function<bool(const char*, CCoinInfo&)>;
+using FAddExtraCoinOld2 = std::function<bool(const char*, CCoinInfoOld2&)>;
 
 using FAddRpcClient = std::function<CNetworkClient*(const std::string&,
                                                     asyncBase*,
@@ -44,6 +45,7 @@ using FCreateMiningStatsHandler = std::function<ComplexMiningStats*(const std::v
 struct CPluginContext {
   bool HasMiningStatsHandler = false;
   std::vector<FAddExtraCoin> AddExtraCoinProcs;
+  std::vector<FAddExtraCoinOld2> AddExtraCoinOld2Procs;
   std::vector<FAddRpcClient> AddRpcClientProcs;
   std::vector<FAddRpcClientForTerminal> AddRpcClientForTerminalProcs;
   std::vector<FCreatePoolInstance> CreatePoolInstanceProcs;

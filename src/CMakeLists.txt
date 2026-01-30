@@ -110,6 +110,17 @@ add_executable(noderpc
 
 target_link_libraries(noderpc ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
 
+# Database migration tool
+add_executable(migrate
+  migrate/migrate.cpp
+  migrate/migratecommon.cpp
+  migrate/struct2.cpp
+  migrate/v3.cpp
+  ${GETOPT_SOURCES}
+)
+
+target_link_libraries(migrate ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
+
 # Password hasher
 add_executable(passwordhash
   passwordHash.cpp

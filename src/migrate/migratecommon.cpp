@@ -138,7 +138,7 @@ bool migrateDatabaseMt(const std::filesystem::path &dbPath, const char *baseName
       continue;
     std::string name = I->path().filename().generic_string();
     if (filter && !filter(name)) {
-      LOG_F(INFO, "  skipping partition %s (filtered)", name.c_str());
+      LOG_F(INFO, "  %s: skipping partition %s (filtered)", baseName, name.c_str());
       continue;
     }
     partitions.push_back(std::move(name));

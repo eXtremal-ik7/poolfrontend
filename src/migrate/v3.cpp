@@ -404,20 +404,23 @@ static bool migrateRounds(const std::filesystem::path &coinPath, const CCoinInfo
     }
 
     // Strict checks on old data (before conversion)
+    bool hasPerUserIncomingWork = false;
     if (!oldRecord.UserShares.empty()) {
       double oldShareSum = 0;
-      for (const auto &s : oldRecord.UserShares)
+      double oldWorkSum = 0;
+      for (const auto &s : oldRecord.UserShares) {
         oldShareSum += s.ShareValue;
+        oldWorkSum += s.IncomingWork;
+      }
       if (oldShareSum != oldRecord.TotalShareValue) {
         LOG_F(ERROR, "Round height=%llu: old data: sum of ShareValue (%.*g) != TotalShareValue (%.*g)",
               static_cast<unsigned long long>(oldRecord.Height), 17, oldShareSum, 17, oldRecord.TotalShareValue);
         return false;
       }
 
-      double oldWorkSum = 0;
-      for (const auto &s : oldRecord.UserShares)
-        oldWorkSum += s.IncomingWork;
-      if (oldWorkSum != oldRecord.AccumulatedWork) {
+      hasPerUserIncomingWork = oldWorkSum != 0;
+      // v1 rounds don't have per-user IncomingWork (all zeros), skip check
+      if (hasPerUserIncomingWork && oldWorkSum != oldRecord.AccumulatedWork) {
         LOG_F(ERROR, "Round height=%llu: old data: sum of IncomingWork (%.*g) != AccumulatedWork (%.*g)",
               static_cast<unsigned long long>(oldRecord.Height), 17, oldWorkSum, 17, oldRecord.AccumulatedWork);
         return false;
@@ -441,9 +444,12 @@ static bool migrateRounds(const std::filesystem::path &coinPath, const CCoinInfo
       if (!correctSum(newRecord.UserShares, newRecord.TotalShareValue, newRecord.Height, "ShareValue",
             [](auto &s) -> UInt<256>& { return s.ShareValue; }))
         return false;
-      if (!correctSum(newRecord.UserShares, newRecord.AccumulatedWork, newRecord.Height, "IncomingWork",
-            [](auto &s) -> UInt<256>& { return s.IncomingWork; }))
-        return false;
+      // v1 rounds don't have per-user IncomingWork (all zeros), skip correction
+      if (hasPerUserIncomingWork) {
+        if (!correctSum(newRecord.UserShares, newRecord.AccumulatedWork, newRecord.Height, "IncomingWork",
+              [](auto &s) -> UInt<256>& { return s.IncomingWork; }))
+          return false;
+      }
     }
 
     if (!newRecord.Payouts.empty()) {

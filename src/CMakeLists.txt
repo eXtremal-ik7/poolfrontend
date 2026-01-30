@@ -100,7 +100,7 @@ add_executable(poolfrontend
   ${GETOPT_SOURCES}
 )
 
-target_link_libraries(poolfrontend ${POOLFRONTEND_EXTRAS} poolinstances ${LIBRARIES})
+target_link_libraries(poolfrontend -Wl,--whole-archive ${POOLFRONTEND_EXTRAS} -Wl,--no-whole-archive poolinstances ${LIBRARIES})
 
 # Node rpc (test node rpc)
 add_executable(noderpc
@@ -108,7 +108,7 @@ add_executable(noderpc
   ${GETOPT_SOURCES}
 )
 
-target_link_libraries(noderpc ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
+target_link_libraries(noderpc -Wl,--whole-archive ${POOLFRONTEND_EXTRAS} -Wl,--no-whole-archive ${LIBRARIES})
 
 # Database migration tool
 add_executable(migrate
@@ -119,7 +119,7 @@ add_executable(migrate
   ${GETOPT_SOURCES}
 )
 
-target_link_libraries(migrate ${POOLFRONTEND_EXTRAS} ${LIBRARIES})
+target_link_libraries(migrate -Wl,--whole-archive ${POOLFRONTEND_EXTRAS} -Wl,--no-whole-archive ${LIBRARIES})
 
 # Password hasher
 add_executable(passwordhash

@@ -491,6 +491,9 @@ int main(int argc, char *argv[])
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     LOG_F(INFO, "Interrupted by user");
+    // Stop mining stats
+    if (poolContext.MiningStats)
+      poolContext.MiningStats->stop();
     // Stop HTTP server
     poolContext.HttpServer->stop();
     // Stop workers
